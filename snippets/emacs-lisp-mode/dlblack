@@ -1,0 +1,6 @@
+# -*- mode: snippet -*-
+# name: Dir-locals Python Black
+# key: dlblack
+# --
+((python-mode . ((apheleia-mode-alist . ((python-mode . black)))
+                 (flycheck-checker . python-flake8))))

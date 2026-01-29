@@ -1,0 +1,6 @@
+# -*- mode: snippet -*-
+# name: Dir-locals Python Ruff
+# key: dlruff
+# --
+((python-mode . ((apheleia-mode-alist . ((python-mode . ruff)))
+                 (flycheck-checker . python-ruff))))

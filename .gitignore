@@ -1,0 +1,59 @@
+# --- Основное ---
+# Игнорируем скачанные пакеты
+elpa/
+straight/
+quelpa/
+
+# Игнорируем временные файлы и авто-сейвы
+auto-save-list/
+network-security.data
+url/
+transient/
+.org-id-locations
+tramp
+*.elc
+*~
+\#*\#
+
+# Кэши LSP и прочее
+.lsp-session-v1
+.eglot-cache
+.cache/
+var/
+tree-sitter/
+jdtls-workspace/
+
+# Игнорируем custom.el (настройки интерфейса, позиции окон)
+custom.el
+
+# История и сервер
+history
+server/
+.aider*
+
+# --- Emacs Cache & State ---
+# Кэш нативной компиляции
+eln-cache/
+# Бекапы файлов
+backup/
+# База поиска
+blink-search.db
+blink-search/
+
+# --- Databases & History ---
+# База знаний Org-roam
+org-roam.db
+# История проектов Projectile
+projectile-bookmarks.eld
+# Закладки
+bookmarks
+# История последних файлов
+recentf
+# Позиция чтения EPUB
+nov-places
+# Папка кэша пакетов
+savefile/
+# Переменные сессий
+persist/
+# Кэш project.el
+projects
