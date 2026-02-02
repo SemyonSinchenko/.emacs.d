@@ -65,5 +65,16 @@
   :config
   (global-wakatime-mode))
 
+(use-package visual-regexp-steroids
+  :ensure t
+  :custom
+  ;; Используем Python для обработки регулярок (нужен python в системе)
+  (vr/engine 'python)
+  :bind
+  ;; C-c r - замена с визуальным фидбеком
+  ("C-c r" . vr/replace)
+  ;; C-c q - query replace (спрашивает подтверждение для каждого)
+  ("C-c q" . vr/query-replace))
+
 (provide 'tools-dired)
 ;;; tools-dired.el ends here
