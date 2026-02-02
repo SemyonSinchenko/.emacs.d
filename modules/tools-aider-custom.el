@@ -42,6 +42,7 @@
   '("--no-auto-commits"     ;; Изменения остаются unstaged
     "--no-dirty-commits"    ;; Не коммитить "грязные" изменения
     "--no-gui"              ;; Только CLI
+    "--dark-mode"           ;; Enable dark mode for terminal
     "--show-model-warnings" ;; Показывать стоимость
     "--show-diffs")         ;; Показывать текстовый дифф
   "List of additional arguments to pass to aider."
@@ -113,17 +114,19 @@ ALWAYS: aider --architect --model <ARCHITECT> --editor-model <EDITOR> ..."
           (select-window window)
         
         ;; 2. Если не виден
-        (if (one-window-p)
-            ;; Сценарий А: Окно одно на весь экран -> Делим пополам
-            (progn
-              (split-window-right)
-              (other-window 1)
-              (switch-to-buffer buffer))
-          
-          ;; Сценарий Б: Окон уже несколько -> Используем "соседнее"
-          (progn
-            (other-window 1)
-            (switch-to-buffer buffer)))))))
+        (let (target-window)
+          (if (one-window-p)
+              ;; Сценарий А: Окно одно на весь экран -> Делим пополам
+              ;; split-window-right возвращает новое окно справа
+              (setq target-window (split-window-right))
+            
+            ;; Сценарий Б: Окон уже несколько -> Используем "соседнее" (справа)
+            ;; next-window находит следующее окно в цикле
+            (setq target-window (next-window)))
+
+          ;; Переключаемся в целевое окно и открываем буфер
+          (select-window target-window)
+          (switch-to-buffer buffer))))))
 
 (provide 'tools-aider-custom)
 ;;; tools-aider-custom.el ends here
