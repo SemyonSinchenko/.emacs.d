@@ -128,5 +128,15 @@ ALWAYS: aider --architect --model <ARCHITECT> --editor-model <EDITOR> ..."
           (select-window target-window)
           (switch-to-buffer buffer))))))
 
+;; --- 3. Клавиши для Vterm (Shift+Enter для переноса строки) ---
+
+(with-eval-after-load 'vterm
+  (define-key vterm-mode-map (kbd "S-<return>")
+	      (lambda ()
+		(interactive)
+		;; Отправляем M-RET (Meta + Enter).
+		;; В Aider и большинстве REPL это означает "перенос строки без отправки".
+		(vterm-send-key "<return>" nil t))))
+
 (provide 'tools-aider-custom)
 ;;; tools-aider-custom.el ends here
