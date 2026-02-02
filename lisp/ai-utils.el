@@ -2,52 +2,66 @@
 
 (require 'gptel)
 
-;; Функция вставки кода (та самая, сложная)
-(defun my/gptel-insert-here (instruction)
-  "Prompts for an instruction and inserts the generated text at the cursor."
+(defun my/gptel-insert-merge-style (instruction)
+  "Generate code and insert it as a merge conflict for review with a detailed prompt."
   (interactive "sInstruction: ")
   (let* ((original-buffer (current-buffer))
-         ;; Очистка имени режима (python-ts-mode -> python)
-         (lang (replace-regexp-in-string "\\(-ts\\)?-mode$" "" (symbol-name major-mode)))
-         (already-in-context (and (boundp 'gptel--context-list)
-                                  (member original-buffer (gptel-context-buffers))))
-         (start-marker (point-marker)))
+         (file-name (buffer-name))
+         (major-mode-name (symbol-name major-mode))
+         (context-before (buffer-substring (max (point-min) (- (point) 700)) (point)))
+         (context-after (buffer-substring (point) (min (point-max) (+ (point) 700))))
+         (start-marker (copy-marker (point) t)))
 
-    ;; 1. Добавляем в контекст
-    (unless already-in-context
-      (gptel-add))
-    
-    (message "GPTel: Writing %s..." lang)
+    (message "GPTel: Expert AI is thinking...")
 
-    ;; 2. Запрос
     (gptel-request
-     instruction
-     :system (format "You are a skilled coding assistant embedded in Emacs.
-LANGUAGE: %s
-TASK: Generate code based on the user's instruction.
-CONTEXT: Use the provided buffers to understand the existing code, style, and variables.
-FORMAT: Return ONLY the raw code to be inserted.
-- NO Markdown code blocks (```).
-- NO conversational text or explanations.
-- Do NOT repeat existing surrounding code. Just output exactly what should be inserted at the cursor." lang)
-     :context (gptel-context-buffers)
-     :stream t
+     ;; Сообщение пользователя с явными границами
+     (format "FILE: %s
+LOCAL CONTEXT BEFORE:
+>>>
+%s
+<<<
+LOCAL CONTEXT AFTER:
+>>>
+%s
+<<<
+INSTRUCTION: %s"
+             file-name context-before context-after instruction)
      
-     ;; 3. Обработка ответа
+     :system (format "You are a Senior Software Engineer specializing in %s.
+Your goal is to generate a surgical code insertion.
+
+CRITICAL RULES:
+1. OUTPUT FORMAT: Provide ONLY the raw source code.
+2. NO MARKDOWN: Do not use triple backticks (```) or any conversational fillers.
+3. NO REPETITION: Do not include code that already exists in the 'CONTEXT BEFORE' or 'CONTEXT AFTER' sections.
+4. ATOMICITY: Generate only what is missing at the exact point of the <CURSOR> (which is between BEFORE and AFTER sections).
+5. STYLE: Match the indentation (spaces/tabs), naming conventions (camelCase/snake_case), and architectural patterns of the provided context.
+6. TASK: If the instruction is 'write docstring', generate ONLY the comment block for the entity immediately following the cursor." major-mode-name)
+     
+     :stream t
      :callback
      (lambda (response info)
-       (if response
-           (with-current-buffer original-buffer
-             (save-excursion
-               (goto-char start-marker)
-               (insert response)
-               (set-marker start-marker (point))))
-         
-         (when (plist-get info :status)
-           (message "GPTel: Done.")
-           (unless already-in-context
-             (with-current-buffer original-buffer
-               (gptel-remove)))))))))
+       (cond
+        ((stringp response)
+         (with-current-buffer (plist-get info :buffer)
+           (save-excursion
+             (goto-char start-marker)
+             (insert response))))
+        
+        ((and (eq response t) (plist-get info :status))
+         (with-current-buffer (plist-get info :buffer)
+           (let ((end-marker (point-marker)))
+             ;; Создаем блок конфликта для smerge
+             (goto-char end-marker)
+             (insert "\n>>>>>>> AI PROPOSAL")
+             (goto-char start-marker)
+             (insert "<<<<<<< ORIGINAL\n=======\n")
+             
+             (smerge-mode 1)
+             ;; Автоматически переходим к следующему конфликту (этому самому)
+             (smerge-next)
+             (message "Review with C-c ^ (n/p to navigate, o to keep AI, m to keep original)")))))))))
 
 ;; Просмотр контекста
 (defun my/gptel-show-context ()
@@ -59,3 +73,4 @@ FORMAT: Return ONLY the raw code to be inserted.
     (message "Context is empty.")))
 
 (provide 'ai-utils)
+;;; ai-utils.el ends here

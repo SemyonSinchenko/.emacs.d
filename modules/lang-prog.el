@@ -6,10 +6,38 @@
 
 ;;; Code:
 
+(require 'project)
+(defvar eglot-server-programs)
+
 ;; --- Python ---
+(defun my/python-venv-autoload ()
+  "Автоматически активирует .venv в корне проекта, если он существует.
+Меняет `exec-path` и `process-environment` локально для буфера, чтобы
+Flycheck, Eglot и Apheleia использовали локальные ruff/mypy/etc."
+  (interactive)
+  ;; Пытаемся найти корень проекта
+  (when-let* ((project (project-current nil))
+              (root (project-root project))
+              (venv-bin (expand-file-name ".venv/bin" root)))
+    ;; Если папка bin существует
+    (when (file-directory-p venv-bin)
+      ;; 1. Добавляем в exec-path (чтобы Emacs видел бинарники)
+      (setq-local exec-path (cons venv-bin exec-path))
+      
+      ;; 2. Добавляем в PATH (чтобы запускаемые саб-процессы видели бинарники)
+      (setq-local process-environment
+                  (cons (concat "PATH=" venv-bin ":" (getenv "PATH"))
+                        process-environment))
+      
+      ;; 3. Говорим python-mode использовать именно этот интерпретатор
+      (setq-local python-shell-interpreter (expand-file-name "python" venv-bin))
+      
+      (message "Activated local venv: %s" venv-bin))))
+
 (use-package python-mode
   :ensure t
   :hook
+  ((python-mode python-ts-mode) . my/python-venv-autoload)
   ((python-mode python-ts-mode) . eglot-ensure)
   :bind
   (:map python-mode-map ("C-c C-p" . nil)) ;; Отключаем run-python, если мешает
@@ -49,7 +77,12 @@ Argument _INTERACTIVE is ignored."
 (use-package scala-mode
   :ensure t
   :interpreter ("scala" . scala-mode)
-  :hook (scala-mode . eglot-ensure)
+  :hook
+  (scala-mode . eglot-ensure)
+  (scala-mode . (lambda ()
+                  ;; Убираем 'idle-change из списка триггеров
+                  ;; Оставляем только 'save (при сохранении) и 'mode-enabled (при открытии)
+                  (setq-local flycheck-check-syntax-automatically '(save mode-enabled))))
   :config
   (with-eval-after-load 'eglot
     (add-to-list 'eglot-server-programs

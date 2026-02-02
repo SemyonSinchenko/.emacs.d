@@ -30,5 +30,13 @@
   :config
   (xclip-mode 1))
 
+;; 5. Форматирование (Apheleia)
+;; Настройка пакета живет в lang-lsp.el.
+;; Здесь мы только регистрируем клавишу (создаем autoload).
+(use-package apheleia
+  :ensure nil  ; Не устанавливать (это делает lang-lsp)
+  :defer t     ; Не загружать сразу (ленивая загрузка)
+  :bind ("C-x x f" . apheleia-format-buffer))
+
 (provide 'core-keys)
 ;;; core-keys.el ends here

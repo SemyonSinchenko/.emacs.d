@@ -1,52 +1,50 @@
-(provide 'tools-ai)
+;;; tools-ai.el --- AI tools configuration (GPTel, Aider) -*- lexical-binding: t; -*-
+
+;;; Commentary:
+;; This module configures AI coding assistants:
+;; - GPTel: configured for OpenRouter (Gemini, etc.) with custom tools.
+;; - Aidermacs: integration with Aider CLI via vterm.
+
+;;; Code:
 
 ;; 1. Загружаем твои личные библиотеки из lisp/
-;; Так как папка lisp/ уже добавлена в load-path в init.el,
-;; require найдет их автоматически.
-(require 'llm-diff)             ; Твой скрипт для git diff
-(require 'ai-utils)             ; Твои функции insert-here и context
-(require 'llm-tool-collection)  ; Твои тулы (убедись, что файл llm-tool-collection.el лежит в lisp/)
+;; (Flycheck может ругаться, что не видит их, так как не знает про init.el)
+(require 'llm-diff)             ; [cite_start]Твой скрипт для git diff [cite: 5]
+(require 'ai-utils)             ; [cite_start]Твои функции insert-here и context [cite: 9]
+(require 'llm-tool-collection)  ; [cite_start]Твои тулы [cite: 8]
 
-;; Хелпер для ключа (можно перенести в ai-utils, но можно и тут)
-(defun my-get-openrouter-api-key () (getenv "OPENROUTER_API_KEY"))
+;; Хелпер для ключа
+(defun my-get-openrouter-api-key ()
+  "Return OpenRouter API key from environment."
+  (getenv "OPENROUTER_API_KEY"))
 
 ;; 2. Настройка GPTel
 (use-package gptel
   :ensure t
   :config
-  ;; Настройки OpenRouter [cite: 8]
   (setq gptel-model 'google/gemini-3-flash-preview
         gptel-backend
         (gptel-make-openai "OpenRouter"
           :host "openrouter.ai"
           :endpoint "/api/v1/chat/completions"
           :stream t
-          :key (my-get-openrouter-api-key) ;; Используем хелпер или getenv напрямую
-          :models '("google/gemini-3-flash-preview")
+          :key (my-get-openrouter-api-key)
+          :models '(
+		    "minimax/minimax-m2.1"
+		    "z-ai/glm-4.7")
           :request-params '(:reasoning (:enabled :json-false))))
 
-  ;; Подключаем тулы из твоей коллекции [cite: 8]
+  ;; [cite_start]Подключаем тулы из твоей коллекции [cite: 8]
   (mapcar (apply-partially #'apply #'gptel-make-tool)
           (llm-tool-collection-get-all)))
 
-;; Пресет для ревью [cite: 14]
+;; [cite_start]Пресет для ревью [cite: 14]
 (gptel-make-preset 'review
   :system "Carefully review the Pull-Request from the buffer.
 Provide a top-level overview of the changes and highlight anything that may require my human touch.")
 
-;; 3. Настройка Aidermacs [cite: 15]
-(use-package aidermacs
-  :ensure t
-  :bind (("C-c a" . aidermacs-transient-menu))
-  :config
-  (setq aidermacs-backend 'vterm
-        aidermacs-vterm-multiline-newline-key "S-<return>"
-        aidermacs-editor-model "openrouter/deepseek/deepseek-v3.2"
-        aidermacs-architect-model "openrouter/deepseek/deepseek-v3.2")
-  (setenv "OPENROUTER_API_KEY" (my-get-openrouter-api-key))
-  :custom
-  (aidermacs-default-chat-mode 'architect)
-  (aidermacs-default-model "openrouter/deepseek/deepseek-v3.2"))
+;; 3. Aider
+(require 'tools-aider-custom)
 
 ;; 4. Клавиши (Keymap)
 ;; Использует функции из lisp/ai-utils.el и lisp/llm-diff.el
@@ -63,7 +61,12 @@ Provide a top-level overview of the changes and highlight anything that may requ
     (keymap-set map "x" #'gptel-context-remove-all)
     (keymap-set map "q" #'gptel-abort)
     (keymap-set map "d" #'my/llm-smart-diff)          ; из llm-diff.el
+    (keymap-set map "a" #'my/aider-run)               ; aider
     map)
   "My key customizations for AI.")
 
 (keymap-global-set "C-x C-." my-gptel-map)
+
+
+(provide 'tools-ai)
+;;; tools-ai.el ends here

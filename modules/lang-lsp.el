@@ -57,7 +57,11 @@
 (use-package flycheck
   :ensure t
   :init
-  (global-flycheck-mode 1))
+  (global-flycheck-mode 1)
+  :config
+  ;; РАЗРЕШАЕМ: flycheck-checker можно безопасно менять через dir-locals,
+  ;; если значение — это символ (например, 'python-ruff)
+  (put 'flycheck-checker 'safe-local-variable #'symbolp))
 
 (use-package flycheck-eglot
   :ensure t
@@ -66,16 +70,33 @@
   (flycheck-eglot-exclusive nil)
   :config
   (global-flycheck-eglot-mode 1)
-  ;; Настраиваем цепочки чекеров
+  
+  ;; Настраиваем цепочки (Ruff -> Eglot)
   (flycheck-add-next-checker 'python-ruff 'eglot-check)
-  (flycheck-add-next-checker 'python-flake8 'eglot-check))
+  (flycheck-add-next-checker 'python-flake8 'eglot-check)
 
+  ;; --- ИСПРАВЛЕНИЕ v2 (Асинхронное) ---
+  (add-hook 'eglot-managed-mode-hook
+            (lambda ()
+	      ;; Используем run-at-time 0, чтобы код выполнился
+	      ;; на следующем цикле событий (после того как Eglot полностью загрузится)
+	      (run-at-time 0 nil
+                           (lambda ()
+                             ;; Ищем, устанавливали ли мы flycheck-checker в dir-locals
+                             (when-let ((forced-checker (cdr (assq 'flycheck-checker dir-local-variables-alist))))
+			       ;; Если в dir-locals есть запись, принудительно возвращаем её
+			       (setq-local flycheck-checker forced-checker)
+			       ;; И перезапускаем проверку уже с правильным чекером
+			       (flycheck-buffer)))))))
 
 ;; 4. Apheleia (Форматирование)
 (use-package apheleia
   :ensure t
   :config
-  (setf (alist-get 'python-mode apheleia-mode-alist) '(ruff)))
+  (setf (alist-get 'python-mode apheleia-mode-alist) '(ruff))
+  ;; РАЗРЕШАЕМ: apheleia-mode-alist можно менять через dir-locals,
+  ;; если значение — это список (listp)
+  (put 'apheleia-mode-alist 'safe-local-variable #'listp))
 
 (provide 'lang-lsp)
 ;;; lang-lsp.el ends here
