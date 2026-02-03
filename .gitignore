@@ -57,3 +57,4 @@ savefile/
 persist/
 # Кэш project.el
 projects
+.cecli*

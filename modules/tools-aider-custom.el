@@ -18,7 +18,7 @@
 
 ;; --- 1. Настройки моделей ---
 
-(defcustom my-aider-program "aider"
+(defcustom my-aider-program "cecli"
   "Path to the aider executable."
   :type 'string
   :group 'my-aider)
@@ -41,8 +41,8 @@
 (defcustom my-aider-args
   '("--no-auto-commits"     ;; Изменения остаются unstaged
     "--no-dirty-commits"    ;; Не коммитить "грязные" изменения
-    "--no-gui"              ;; Только CLI
     "--dark-mode"           ;; Enable dark mode for terminal
+    "--no-tui"              ;; Disable TUI
     "--show-model-warnings" ;; Показывать стоимость
     "--show-diffs")         ;; Показывать текстовый дифф
   "List of additional arguments to pass to aider."
@@ -136,7 +136,7 @@ ALWAYS: aider --architect --model <ARCHITECT> --editor-model <EDITOR> ..."
 		(interactive)
 		;; Отправляем M-RET (Meta + Enter).
 		;; В Aider и большинстве REPL это означает "перенос строки без отправки".
-		(vterm-send-key "<return>" nil t))))
+		(vterm-insert "\n"))))
 
 (provide 'tools-aider-custom)
 ;;; tools-aider-custom.el ends here
