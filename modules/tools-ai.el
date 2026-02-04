@@ -22,7 +22,7 @@
 (use-package gptel
   :ensure t
   :config
-  (setq gptel-model 'google/gemini-3-flash-preview
+  (setq gptel-model 'deepseek/deepseek-v3.2
         gptel-backend
         (gptel-make-openai "OpenRouter"
           :host "openrouter.ai"
@@ -30,6 +30,7 @@
           :stream t
           :key (my-get-openrouter-api-key)
           :models '(
+		    "deepseek/deepseek-v3.2"
 		    "minimax/minimax-m2.1"
 		    "z-ai/glm-4.7")
           :request-params '(:reasoning (:enabled :json-false))))
@@ -53,7 +54,7 @@ Provide a top-level overview of the changes and highlight anything that may requ
     (keymap-set map "g" #'gptel)
     (keymap-set map "s" #'gptel-send)
     (keymap-set map "r" #'gptel-rewrite)
-    (keymap-set map "a" #'gptel-add)
+    (keymap-set map "b" #'gptel-add)
     (keymap-set map "f" #'gptel-add-file)
     (keymap-set map "m" #'gptel-menu)
     (keymap-set map "l" #'my/gptel-show-context)      ; из ai-utils.el

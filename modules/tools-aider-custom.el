@@ -18,17 +18,17 @@
 
 ;; --- 1. Настройки моделей ---
 
-(defcustom my-aider-program "cecli"
+(defcustom my-aider-program "aider"
   "Path to the aider executable."
   :type 'string
   :group 'my-aider)
 
-(defcustom my-aider-architect-model "z-ai/glm-4.7"
+(defcustom my-aider-architect-model "deepseek/deepseek-v3.2"
   "The 'Thinking' model. In architect mode, this is passed as --model."
   :type 'string
   :group 'my-aider)
 
-(defcustom my-aider-editor-model "minimax/minimax-m2.1"
+(defcustom my-aider-editor-model "deepseek/deepseek-v3.2"
   "The 'Coding' model. Passed as --editor-model."
   :type 'string
   :group 'my-aider)
@@ -42,7 +42,7 @@
   '("--no-auto-commits"     ;; Изменения остаются unstaged
     "--no-dirty-commits"    ;; Не коммитить "грязные" изменения
     "--dark-mode"           ;; Enable dark mode for terminal
-    "--no-tui"              ;; Disable TUI
+    "--no-gui"              ;; Disable TUI
     "--show-model-warnings" ;; Показывать стоимость
     "--show-diffs")         ;; Показывать текстовый дифф
   "List of additional arguments to pass to aider."

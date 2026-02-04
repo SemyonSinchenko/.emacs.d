@@ -40,6 +40,9 @@
 (require 'lang-lsp)        ;; LSP (Eglot) и линтеры
 (require 'lang-prog)       ;; Настройки конкретных языков
 
+;; ИИ-ассистент
+(require 'tools-rss)
+
 ;; 5. Возвращаем GC в норму
 (setq gc-cons-threshold (* 2 1000 1000))
 

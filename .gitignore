@@ -58,3 +58,4 @@ persist/
 # Кэш project.el
 projects
 .cecli*
+elfeed/
