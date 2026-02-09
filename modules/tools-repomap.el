@@ -265,9 +265,29 @@ Otherwise (Elisp), takes the first line."
               (redisplay)))))
       )
     
-    (message "Map generated: %s (%d files processed)" map-file count)
-    (when (y-or-n-p "Add generated map to Gptel context?")
-      (gptel-add-file map-file))))
+    (message "Map generated: %s (%d files processed)" map-file count)))
+
+;;;###autoload
+(defun my/repomap-add-context ()
+  "Add project map to Gptel context.
+If map doesn't exist, ask to generate it first."
+  (interactive)
+  (let* ((project (project-current nil))
+         (root (if project (project-root project) default-directory))
+         (map-file (expand-file-name my-repomap-file root)))
+    
+    (if (file-exists-p map-file)
+        ;; Map exists - add to context
+        (progn
+          (gptel-add-file map-file)
+          (message "Project map added to Gptel context"))
+      
+      ;; Map doesn't exist - ask to generate
+      (when (y-or-n-p (format "Project map not found at %s. Generate it now?" map-file))
+        (my/repomap-generate)
+        (when (file-exists-p map-file)
+          (gptel-add-file map-file)
+          (message "Project map generated and added to Gptel context"))))))
 
 (provide 'tools-repomap)
 ;;; tools-repomap.el ends here

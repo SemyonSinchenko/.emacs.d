@@ -12,6 +12,7 @@
 (require 'llm-diff)             ; [cite_start]Твой скрипт для git diff [cite: 5]
 (require 'ai-utils)             ; [cite_start]Твои функции insert-here и context [cite: 9]
 (require 'llm-tool-collection)  ; [cite_start]Твои тулы [cite: 8]
+(require 'tools-repomap)
 
 ;; Хелпер для ключа
 (defun my-get-openrouter-api-key ()
@@ -22,7 +23,7 @@
 (use-package gptel
   :ensure t
   :config
-  (setq gptel-model 'deepseek/deepseek-v3.2
+  (setq gptel-model 'qwen/qwen3-coder-next
         gptel-backend
         (gptel-make-openai "OpenRouter"
           :host "openrouter.ai"
@@ -31,23 +32,20 @@
           :key (my-get-openrouter-api-key)
           :models '(
 		    "deepseek/deepseek-v3.2"
-		    "minimax/minimax-m2.1"
-		    "z-ai/glm-4.7")
+		    "qwen/qwen3-coder-next")
           :request-params '(:reasoning (:enabled :json-false))))
 
   ;; [cite_start]Подключаем тулы из твоей коллекции [cite: 8]
   (mapcar (apply-partially #'apply #'gptel-make-tool)
           (llm-tool-collection-get-all)))
 
-;; [cite_start]Пресет для ревью [cite: 14]
+;; Пресет для ревью
 (gptel-make-preset 'review
   :system "Carefully review the Pull-Request from the buffer.
 Provide a top-level overview of the changes and highlight anything that may require my human touch.")
-
 ;; 3. Aider
 (require 'tools-aider-custom)
 
-;; 4. Клавиши (Keymap)
 ;; Использует функции из lisp/ai-utils.el и lisp/llm-diff.el
 (defvar my-gptel-map
   (let ((map (make-sparse-keymap)))
@@ -57,8 +55,8 @@ Provide a top-level overview of the changes and highlight anything that may requ
     (keymap-set map "b" #'gptel-add)
     (keymap-set map "f" #'gptel-add-file)
     (keymap-set map "m" #'gptel-menu)
+    (keymap-set map "p" #'my/repomap-add-context)     ; project map
     (keymap-set map "l" #'my/gptel-show-context)      ; из ai-utils.el
-    (keymap-set map "i" #'my/gptel-insert-here)       ; из ai-utils.el
     (keymap-set map "x" #'gptel-context-remove-all)
     (keymap-set map "q" #'gptel-abort)
     (keymap-set map "d" #'my/llm-smart-diff)          ; из llm-diff.el
@@ -67,7 +65,6 @@ Provide a top-level overview of the changes and highlight anything that may requ
   "My key customizations for AI.")
 
 (keymap-global-set "C-x C-." my-gptel-map)
-
 
 (provide 'tools-ai)
 ;;; tools-ai.el ends here

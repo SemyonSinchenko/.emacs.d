@@ -11,6 +11,7 @@
 
 (require 'vterm)
 (require 'project)
+(require 'cl-lib)
 
 (defgroup my-aider nil
   "Custom Aider configuration."
@@ -24,23 +25,23 @@
   :group 'my-aider)
 
 (defcustom my-aider-architect-model "deepseek/deepseek-v3.2"
-  "The 'Thinking' model. In architect mode, this is passed as --model."
+  "The \='Thinking' model.  In architect mode, this is passed as --model."
   :type 'string
   :group 'my-aider)
 
 (defcustom my-aider-editor-model "deepseek/deepseek-v3.2"
-  "The 'Coding' model. Passed as --editor-model."
+  "The \='Coding' model.  Passed as --editor-model."
   :type 'string
   :group 'my-aider)
 
-(defcustom my-aider-weak-model "minimax/minimax-m2.1"
+(defcustom my-aider-weak-model "qwen/qwen3-235b-a22b-2507"
   "Weak model (--weak-model) for simple tasks."
   :type 'string
   :group 'my-aider)
 
 (defcustom my-aider-args
-  '("--no-auto-commits"     ;; Изменения остаются unstaged
-    "--no-dirty-commits"    ;; Не коммитить "грязные" изменения
+  '("--no-analytics"        ;; Disable analytics
+    "--no-git-commit-verify";; No hooks
     "--dark-mode"           ;; Enable dark mode for terminal
     "--no-gui"              ;; Disable TUI
     "--show-model-warnings" ;; Показывать стоимость
@@ -52,7 +53,7 @@
 ;; --- 2. Логика запуска ---
 
 (defun my/aider--format-model (model)
-  "Ensures model name starts with openrouter/ if it's not a local one."
+  "Ensures MODEL name start with openrouter/ if it's not a local one."
   (if (or (string-empty-p model)
           (string-prefix-p "openrouter/" model))
       model
@@ -87,55 +88,29 @@ ALWAYS: aider --architect --model <ARCHITECT> --editor-model <EDITOR> ..."
     ;; Собираем в строку
     (mapconcat #'identity cmd " ")))
 
-(defun my/aider-run (&optional restart)
-  "Open or create Aider vterm buffer in the project root."
-  (interactive "P")
+(defun my/aider-run ()
+  "Open Aider vterm buffer in the project root.
+Always opens in the right window of a split, or creates a split if needed."
+  (interactive)
   (let* ((project (project-current nil))
          (root (if project (project-root project) default-directory))
          (buffer-name (format "*aider:%s*" (file-name-nondirectory (directory-file-name root))))
-         (buffer (get-buffer buffer-name)))
+         (current-window (selected-window)))
 
-    ;; Рестарт (убиваем старый, если есть)
-    (when (and restart buffer)
-      (kill-buffer buffer)
-      (setq buffer nil))
+    ;; If window is already split (has a right neighbor), use it; otherwise split right
+    (if (window-right current-window)
+        (select-window (window-right current-window))
+      (select-window (split-window-right)))
 
-    ;; Создаем новый, если нет
-    (unless buffer
-      (with-current-buffer (vterm buffer-name)
-        (setq buffer (current-buffer))
-        (vterm-send-string (format "cd %s\n" root))
-        (vterm-send-string (concat (my/aider-get-command) "\n"))))
-
-    ;; --- Умное управление окнами ---
-    (let ((window (get-buffer-window buffer)))
-      (if window
-          ;; 1. Если Aider уже виден где-то -> просто прыгаем туда
-          (select-window window)
-        
-        ;; 2. Если не виден
-        (let (target-window)
-          (if (one-window-p)
-              ;; Сценарий А: Окно одно на весь экран -> Делим пополам
-              ;; split-window-right возвращает новое окно справа
-              (setq target-window (split-window-right))
-            
-            ;; Сценарий Б: Окон уже несколько -> Используем "соседнее" (справа)
-            ;; next-window находит следующее окно в цикле
-            (setq target-window (next-window)))
-
-          ;; Переключаемся в целевое окно и открываем буфер
-          (select-window target-window)
-          (switch-to-buffer buffer))))))
-
-;; --- 3. Клавиши для Vterm (Shift+Enter для переноса строки) ---
+    ;; Create or switch to the Aider buffer in this window
+    (switch-to-buffer (vterm buffer-name))
+    (vterm-send-string (format "cd %s\n" root))
+    (vterm-send-string (concat (my/aider-get-command) "\n"))))
 
 (with-eval-after-load 'vterm
   (define-key vterm-mode-map (kbd "S-<return>")
 	      (lambda ()
 		(interactive)
-		;; Отправляем M-RET (Meta + Enter).
-		;; В Aider и большинстве REPL это означает "перенос строки без отправки".
 		(vterm-insert "\n"))))
 
 (provide 'tools-aider-custom)
