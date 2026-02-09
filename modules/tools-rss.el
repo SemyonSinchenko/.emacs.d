@@ -107,10 +107,10 @@
             (concat (substring text 0 3000) "...")
           text)))))
 
-(defun my/rss-collect-entries (filter-fn)
-  "Fetch entries from last 24h.
+(defun my/rss-collect-entries (filter-fn days)
+  "Fetch entries from last DAYS days.
 FILTER-FN is a function that takes a list of tag strings and returns non-nil if entry should be kept."
-  (let ((since-time (time-subtract (current-time) (days-to-time 1)))
+  (let ((since-time (time-subtract (current-time) (days-to-time days)))
         (raw-entries '()))
     (elfeed-db-ensure)
     
@@ -162,8 +162,8 @@ FILTER-FN is a function that takes a list of tag strings and returns non-nil if 
       entries-text)))
 
 ;; -- Промпт для GENERAL (обычные новости) --
-(defun my/rss--build-general-prompt (entries)
-  (format "Analyze the following RSS entries from the last 24 hours.
+(defun my/rss--build-general-prompt (entries days)
+  (format "Analyze the following RSS entries from the last %d days.
 Target Audience: Senior Software Engineer.
 Language: Russian.
 Output Format: Org-mode.
@@ -171,7 +171,7 @@ Output Format: Org-mode.
 Task:
 1. Group articles by categories: %s.
 2. Structure:
-   * 🚀 Главное за сутки (Executive Summary)
+   * 🚀 Главное за %d дней (Executive Summary)
    * 📂 Категории
      ** Category Name
      - [[Link][Title]] (Source) - 1 concise sentence summary.
@@ -185,11 +185,13 @@ Task:
 
 Data:
 %s"
+          days
           (mapconcat #'cdr my-rss-categories ", ")
+          days
           (my/rss--build-entries-text entries)))
 
 ;; -- Промпт для ARXIV (наука) --
-(defun my/rss--build-arxiv-prompt (entries)
+(defun my/rss--build-arxiv-prompt (entries days)
   (format "You are a Research Assistant monitoring Arxiv preprints.
 Target Audience: Graph & Data Systems Researcher.
 Language: Russian.
@@ -202,7 +204,7 @@ Task:
 2. For EACH Category, generate a report with specific subsections (if applicable):
 
    ** Category Name (e.g. cs.DB)
-      *** 🧐 Обзор (Overview of yesterday's trend)
+      *** 🧐 Обзор (Overview of last %d days trend)
       *** 🛠 Практика и Системы (New DBs, DistSys, Optimizations)
           - [[Link][Title]]
             :WHAT: What they built/optimized.
@@ -220,6 +222,7 @@ Task:
 Data:
 %s"
           (mapconcat #'cdr my-rss-arxiv-categories ", ")
+          days
           (my/rss--build-entries-text entries)))
 
 ;; --- 4. Ядро Генерации ---
@@ -240,8 +243,9 @@ Data:
                     (message "Digest generated at %s" target-path)
                     (find-file target-path))))))
 
-(defun my/rss--run-logic (filename-fmt filter-fn prompt-builder-fn title-prefix)
-  "Main logic orchestrator."
+(defun my/rss--run-logic (filename-fmt filter-fn prompt-builder-fn title-prefix days)
+  "Main logic orchestrator.
+DAYS is the number of days to look back."
   (let* ((dir (expand-file-name my-rss-dir))
          (filename (format-time-string filename-fmt))
          (filepath (expand-file-name filename dir)))
@@ -250,16 +254,16 @@ Data:
 
     (if (file-exists-p filepath)
         (find-file filepath)
-      (if (y-or-n-p (format "Generate %s? (Triggers LLM)" title-prefix))
+      (if (y-or-n-p (format "Generate %s for last %d days? (Triggers LLM)" title-prefix days))
           (progn
             (message "Fetching entries...")
             (elfeed-db-ensure)
-            (let ((entries (my/rss-collect-entries filter-fn)))
+            (let ((entries (my/rss-collect-entries filter-fn days)))
               (if (null entries)
                   (message "No entries found for filter.")
                 (message "Found %d entries. Asking AI..." (length entries))
                 (my/rss--generate-file filepath 
-                                       (funcall prompt-builder-fn entries)
+                                       (funcall prompt-builder-fn entries days)
                                        title-prefix))))
         (message "Aborted.")))))
 
@@ -269,23 +273,27 @@ Data:
 (defun my/get-morning-read ()
   "General Daily Digest (Excludes Arxiv)."
   (interactive)
-  (my/rss--run-logic 
-   "%Y-%m-%d.org"
-   ;; Фильтр: ИСКЛЮЧИТЬ 'arxiv'
-   (lambda (tags) (not (member "arxiv" tags)))
-   #'my/rss--build-general-prompt
-   "Daily Digest"))
+  (let ((days (read-number "Number of days to include in digest: " 1)))
+    (my/rss--run-logic 
+     "%Y-%m-%d.org"
+     ;; Фильтр: ИСКЛЮЧИТЬ 'arxiv'
+     (lambda (tags) (not (member "arxiv" tags)))
+     #'my/rss--build-general-prompt
+     "Daily Digest"
+     days)))
 
 ;;;###autoload
 (defun my/get-morning-arxiv ()
   "Arxiv Research Digest (Only Arxiv)."
   (interactive)
-  (my/rss--run-logic 
-   "%Y-%m-%d-arxiv.org"
-   ;; Фильтр: ТОЛЬКО 'arxiv'
-   (lambda (tags) (member "arxiv" tags))
-   #'my/rss--build-arxiv-prompt
-   "Arxiv Digest"))
+  (let ((days (read-number "Number of days to include in digest: " 1)))
+    (my/rss--run-logic 
+     "%Y-%m-%d-arxiv.org"
+     ;; Фильтр: ТОЛЬКО 'arxiv'
+     (lambda (tags) (member "arxiv" tags))
+     #'my/rss--build-arxiv-prompt
+     "Arxiv Digest"
+     days)))
 
 (provide 'tools-rss)
 ;;; tools-rss.el ends here
