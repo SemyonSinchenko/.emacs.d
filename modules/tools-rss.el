@@ -110,8 +110,9 @@
 (defun my/rss-collect-entries (filter-fn days)
   "Fetch entries from last DAYS days.
 FILTER-FN is a function that takes a list of tag strings and returns non-nil if entry should be kept."
-  (let ((since-time (time-subtract (current-time) (days-to-time days)))
-        (raw-entries '()))
+  (let* ((days-int (truncate days))
+         (since-time (time-subtract (current-time) (days-to-time days-int)))
+         (raw-entries '()))
     (elfeed-db-ensure)
     
     (with-elfeed-db-visit (entry feed)
@@ -230,14 +231,15 @@ Data:
 (defun my/rss--generate-file (target-path prompt title-prefix days)
   "Generic function to call LLM and write to file.
 DAYS is the number of days the digest covers."
-  (let ((gptel-model my-rss-model)
-        ;; Вычисляем дату начала (DAYS дней назад)
-        (from-date (time-subtract (current-time) (days-to-time days)))
-        ;; Дата окончания - сегодня (включительно)
-        (to-date (current-time))
-        ;; Форматируем даты в строки
-        (from-str (format-time-string "%Y-%m-%d" from-date))
-        (to-str (format-time-string "%Y-%m-%d" to-date)))
+  (let* ((days-int (truncate days))
+         (gptel-model my-rss-model)
+         ;; Вычисляем дату начала (DAYS дней назад)
+         (from-date (time-subtract (current-time) (days-to-time days-int)))
+         ;; Дата окончания - сегодня (включительно)
+         (to-date (current-time))
+         ;; Форматируем даты в строки
+         (from-str (format-time-string "%Y-%m-%d" from-date))
+         (to-str (format-time-string "%Y-%m-%d" to-date)))
     (gptel-request prompt
       :system "You are a helpful Technical Editor assistant."
       :callback (lambda (response info)
