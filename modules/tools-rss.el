@@ -238,9 +238,9 @@ DAYS is the number of days the digest covers."
          (from-date (time-subtract (current-time) (days-to-time days-int)))
          ;; Дата окончания - сегодня (включительно)
          (to-date (current-time))
-         ;; Форматируем даты в строки
-         (from-str (format-time-string "%Y-%m-%d" from-date))
-         (to-str (format-time-string "%Y-%m-%d" to-date)))
+         ;; Форматируем даты в строки в формате ORG
+         (from-org (format-time-string "[%Y-%m-%d %a]" from-date))
+         (to-org (format-time-string "[%Y-%m-%d %a]" to-date)))
     (gptel-request prompt
       :system "You are a helpful Technical Editor assistant."
       :callback (lambda (response info)
@@ -248,8 +248,8 @@ DAYS is the number of days the digest covers."
                       (message "LLM Error: %s" (plist-get info :status))
                     (with-temp-file target-path
                       (insert "#+TITLE: " title-prefix ": " (format-time-string "%Y-%m-%d") "\n")
-                      (insert "#+FROM: " from-str "\n")
-                      (insert "#+TO: " to-str "\n")
+                      (insert "#+FROM: " from-org "\n")
+                      (insert "#+TO: " to-org "\n")
                       (insert "#+DATE: " (format-time-string "[%Y-%m-%d %a]") "\n")
                       (insert "#+STARTUP: showall\n\n")
                       (insert response))
