@@ -227,9 +227,17 @@ Data:
 
 ;; --- 4. Ядро Генерации ---
 
-(defun my/rss--generate-file (target-path prompt title-prefix)
-  "Generic function to call LLM and write to file."
-  (let ((gptel-model my-rss-model))
+(defun my/rss--generate-file (target-path prompt title-prefix days)
+  "Generic function to call LLM and write to file.
+DAYS is the number of days the digest covers."
+  (let ((gptel-model my-rss-model)
+        ;; Вычисляем дату начала (DAYS дней назад)
+        (from-date (time-subtract (current-time) (days-to-time days)))
+        ;; Дата окончания - сегодня (включительно)
+        (to-date (current-time))
+        ;; Форматируем даты в строки
+        (from-str (format-time-string "%Y-%m-%d" from-date))
+        (to-str (format-time-string "%Y-%m-%d" to-date)))
     (gptel-request prompt
       :system "You are a helpful Technical Editor assistant."
       :callback (lambda (response info)
@@ -237,11 +245,13 @@ Data:
                       (message "LLM Error: %s" (plist-get info :status))
                     (with-temp-file target-path
                       (insert "#+TITLE: " title-prefix ": " (format-time-string "%Y-%m-%d") "\n")
+                      (insert "#+FROM: " from-str "\n")
+                      (insert "#+TO: " to-str "\n")
                       (insert "#+DATE: " (format-time-string "[%Y-%m-%d %a]") "\n")
                       (insert "#+STARTUP: showall\n\n")
                       (insert response))
                     (message "Digest generated at %s" target-path)
-                    (find-file target-path))))))
+                    (find-file target-path)))))))
 
 (defun my/rss--run-logic (filename-fmt filter-fn prompt-builder-fn title-prefix days)
   "Main logic orchestrator.
@@ -264,7 +274,8 @@ DAYS is the number of days to look back."
                 (message "Found %d entries. Asking AI..." (length entries))
                 (my/rss--generate-file filepath 
                                        (funcall prompt-builder-fn entries days)
-                                       title-prefix))))
+                                       title-prefix
+                                       days))))  ;; ← Добавляем передачу дней
         (message "Aborted.")))))
 
 ;; --- 5. Интерактивные команды (UI) ---
