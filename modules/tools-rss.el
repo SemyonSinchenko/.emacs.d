@@ -254,7 +254,7 @@ DAYS is the number of days to look back."
 
     (if (file-exists-p filepath)
         (find-file filepath)
-      (if (y-or-n-p (format "Generate %s for last %d days? (Triggers LLM)" title-prefix days))
+      (if (y-or-n-p (format "Generate %s for last %d days (Triggers LLM)?" title-prefix days))
           (progn
             (message "Fetching entries...")
             (elfeed-db-ensure)
