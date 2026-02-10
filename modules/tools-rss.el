@@ -109,7 +109,8 @@
 
 (defun my/rss-collect-entries (filter-fn days)
   "Fetch entries from last DAYS days.
-FILTER-FN is a function that takes a list of tag strings and returns non-nil if entry should be kept."
+FILTER-FN is a function that takes a list of tag strings and
+returns non-nil if entry should be kept."
   (let* ((days-int (truncate days))
          (since-time (time-subtract (current-time) (days-to-time days-int)))
          (raw-entries '()))
@@ -253,7 +254,7 @@ DAYS is the number of days the digest covers."
                       (insert "#+STARTUP: showall\n\n")
                       (insert response))
                     (message "Digest generated at %s" target-path)
-                    (find-file target-path)))))))
+                    (find-file target-path))))))
 
 (defun my/rss--run-logic (filename-fmt filter-fn prompt-builder-fn title-prefix days)
   "Main logic orchestrator.
