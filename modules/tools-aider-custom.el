@@ -40,12 +40,13 @@
   :group 'my-aider)
 
 (defcustom my-aider-args
-  '("--no-analytics"        ;; Disable analytics
-    "--no-git-commit-verify";; No hooks
-    "--dark-mode"           ;; Enable dark mode for terminal
-    "--no-gui"              ;; Disable TUI
-    "--show-model-warnings" ;; Показывать стоимость
-    "--show-diffs")         ;; Показывать текстовый дифф
+  '("--no-attribute-co-authored-by" ;; No git attribute
+    "--no-analytics"                ;; Disable analytics
+    "--no-git-commit-verify"        ;; No hooks
+    "--dark-mode"                   ;; Enable dark mode for terminal
+    "--no-gui"                      ;; Disable TUI
+    "--show-model-warnings"         ;; Показывать стоимость
+    "--show-diffs")                 ;; Показывать текстовый дифф
   "List of additional arguments to pass to aider."
   :type '(repeat string)
   :group 'my-aider)

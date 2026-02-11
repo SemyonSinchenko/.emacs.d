@@ -55,5 +55,11 @@
   ;; Можно добавить ассоциации файлов, если они не подхватились
   (add-to-list 'auto-mode-alist '("\\.epub\\'" . reader-mode)))
 
+;; --- 4. Telega ---
+(use-package telega
+  :ensure t
+  :config
+  (setq telega-emoji-use-images nil))
+
 (provide 'tools-org)
 ;;; tools-org.el ends here
