@@ -170,20 +170,25 @@ Target Audience: Senior Software Engineer.
 Language: Russian.
 Output Format: Org-mode.
 
+CRITICAL OUTPUT RULES:
+- Return ONLY raw Org-mode text. No markdown, no code fences (no ``` symbols), no reasoning, no explanations before or after.
+- Start your response directly with the first Org-mode heading.
+- Do not wrap the output in any block or container.
+
 Task:
 1. Group articles by categories: %s.
 2. Structure:
-   * 🚀 Главное за %d дней (Executive Summary)
+   * 🚀 Главное за %d дней (Executive Summary — 3-5 sentences overview of the period)
    * 📂 Категории
      ** Category Name
-     - [[Link][Title]] (Source) - 1 concise sentence summary.
-   * 💎 Выбор редакции (Top 3 interesting reads)
-     ** [[Link][Title]]
-     :SCORE: X/10
-     :WHY: Brief reasoning.
-3. Follow ORG-mode convention: * -- top-level header, ** -- sub-header, etc.
-4. Result should be org-mode formatted and optimized for reading by human.
-
+        - [[Link][Title]] (Source) - 1 concise sentence summary.
+        *** 💎 Топ-3 категории (Top 3 most interesting reads in this category)
+            **** [[Link][Title]]
+                 :SCORE: X/10
+                 :WHY: Brief reasoning why this is a must-read.
+3. Every category MUST have its own 💎 Топ-3 subsection with exactly 3 entries (or fewer if the category has less than 3 articles).
+4. Follow ORG-mode convention strictly: * -- top-level header, ** -- second level, *** -- third level, **** -- fourth level.
+5. Result must be valid Org-mode, optimized for human reading.
 
 Data:
 %s"
@@ -242,7 +247,7 @@ DAYS is the number of days the digest covers."
          (from-org (format-time-string "[%Y-%m-%d %a]" from-date))
          (to-org (format-time-string "[%Y-%m-%d %a]" to-date)))
     (gptel-request prompt
-      :system "You are a helpful Technical Editor assistant."
+      :system "You are a helpful Technical Editor assistant. You output ONLY raw Org-mode text. Never use markdown code fences or any wrapper syntax. Never include reasoning or commentary outside of the requested Org-mode structure. Start your response directly with the first Org-mode heading."
       :callback (lambda (response info)
                   (if (not response)
                       (message "LLM Error: %s" (plist-get info :status))
@@ -278,7 +283,7 @@ DAYS is the number of days to look back."
                 (my/rss--generate-file filepath 
                                        (funcall prompt-builder-fn entries days)
                                        title-prefix
-                                       days))))  ;; ← Добавляем передачу дней
+                                       days))))
         (message "Aborted.")))))
 
 ;; --- 5. Интерактивные команды (UI) ---
