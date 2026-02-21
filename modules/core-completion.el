@@ -111,5 +111,15 @@
                        #'eglot-completion-at-point
                        #'yasnippet-capf)))))
 
+;; Добавляем Company ТОЛЬКО как библиотеку-зависимость.
+;; Мы НЕ включаем (global-company-mode) и не вешаем хуки.
+(use-package company
+  :ensure t
+  :defer t  ;; Ленивая загрузка
+  :custom
+  ;; Отключаем UI company на всякий случай, если он вдруг решит проснуться
+  (company-begin-commands nil)
+  (company-idle-delay nil))
+
 (provide 'core-completion)
 ;;; core-completion.el ends here

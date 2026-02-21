@@ -48,6 +48,7 @@
 
 ;; --- 3. E-Book Reader ---
 
+(setq package-vc-allow-build-commands t)
 (use-package reader
   :ensure t
   :vc (:url "https://codeberg.org/divyaranjan/emacs-reader" :make "all")
@@ -59,7 +60,19 @@
 (use-package telega
   :ensure t
   :config
-  (setq telega-emoji-use-images nil))
+  (setq telega-emoji-use-images nil)
+  (defun my/telega-chat-corfu-setup ()
+    "Setup Capf for Telega using Company engine but Corfu UI."
+    ;; 1. Грузим библиотеку company (функции), но не включаем режим
+    (require 'company)
+    
+    ;; 2. Говорим Telega использовать capf-адаптер
+    ;; Corfu автоматически подхватит эту функцию
+    (add-hook 'completion-at-point-functions
+              #'telega-chatbuf-complete-at-point nil 'local))
+
+  ;; Вешаем на хук открытия чата
+  (add-hook 'telega-chat-mode-hook #'my/telega-chat-corfu-setup))
 
 (provide 'tools-org)
 ;;; tools-org.el ends here

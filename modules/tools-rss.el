@@ -42,7 +42,7 @@
   :type 'directory
   :group 'my-rss)
 
-(defcustom my-rss-model 'deepseek/deepseek-v3.2
+(defcustom my-rss-model 'anthropic/claude-sonnet-4.6
   "Model to use for summarization."
   :type 'symbol
   :group 'my-rss)

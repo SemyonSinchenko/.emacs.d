@@ -24,12 +24,12 @@
   :type 'string
   :group 'my-aider)
 
-(defcustom my-aider-architect-model "deepseek/deepseek-v3.2"
+(defcustom my-aider-architect-model "anthropic/claude-sonnet-4.6"
   "The \='Thinking' model.  In architect mode, this is passed as --model."
   :type 'string
   :group 'my-aider)
 
-(defcustom my-aider-editor-model "deepseek/deepseek-v3.2"
+(defcustom my-aider-editor-model "anthropic/claude-sonnet-4.6"
   "The \='Coding' model.  Passed as --editor-model."
   :type 'string
   :group 'my-aider)
