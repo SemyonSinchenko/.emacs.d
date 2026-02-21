@@ -52,7 +52,7 @@
   :type 'integer
   :group 'my-rss)
 
-(defcustom my-rss-max-input-tokens 200000
+(defcustom my-rss-max-input-tokens 199000
   "Hard limit on input characters prompt."
   :type 'integer
   :group 'my-rss)
