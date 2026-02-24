@@ -1,0 +1,25 @@
+# -*- mode: snippet -*-
+# name: Spec-Kit Markdown Template
+# key: speckit
+# --
+# ${1:Feature Name}
+
+## 1. Context & Problem
+* ${2:Why are we building this?}
+
+## 2. Expected Behavior
+* ${3:What exactly should the system do?}
+
+## 3. User Flow
+1. ${4:User does X...}
+
+## 4. Out of Scope
+* ${5:What are we strictly NOT doing?}
+
+## 5. Edge Cases
+* ${6:What if...}
+
+## 6. Acceptance Criteria
+* [ ] ${7:Criterion 1}
+
+$0
