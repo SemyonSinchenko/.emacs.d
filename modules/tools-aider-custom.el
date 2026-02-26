@@ -9,7 +9,6 @@
 
 ;;; Code:
 
-(require 'vterm)
 (require 'project)
 (require 'cl-lib)
 

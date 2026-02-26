@@ -6,6 +6,10 @@
 
 ;;; Code:
 
+;;; Disable TRAMP-GVFS
+(setq tramp-archive-enabled nil)
+(defalias 'tramp-archive-file-name-p #'ignore)
+
 ;; 1. Отключаем UI элементы в параметрах фрейма (до их отрисовки)
 ;; Это предотвращает "мигание" интерфейса при старте
 (push '(menu-bar-lines . 0) default-frame-alist)

@@ -32,6 +32,7 @@
 ;; 2. Eglot (LSP Client)
 (use-package eglot
   :ensure t
+  :defer t
   :custom
   (eglot-ignored-server-capabilities '(:semanticTokensProvider :inlayHintProvider :documentOnTypeFormattingProvider))
   (eglot-stay-out-of '(indentation))

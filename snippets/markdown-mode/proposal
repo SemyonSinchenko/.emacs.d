@@ -1,0 +1,19 @@
+# -*- mode: snippet -*-
+# name: OpenSpec Proposal Template
+# key: proposal
+# --
+# Proposal: ${1:Feature Name}
+
+## Intent
+${2:The "why" - What problem are we solving? Why is this change necessary? What is the desired outcome?}
+
+## Scope
+- ${3:Requirement 1}
+- ${4:Requirement 2}
+- ${5:Out of scope item (optional)}
+
+## What Changes: $1
+${6:High-level summary of the modifications to existing systems or new systems being introduced.}
+
+## Approach
+${7:The "how" - Technical strategy, architectural decisions, and key implementation details.}

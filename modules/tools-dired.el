@@ -11,7 +11,7 @@
   :ensure t
   :config
   (when (memq window-system '(mac ns x pgtk))
-    (exec-path-from-shell-initialize)))
+    (run-with-idle-timer 1 nil #'exec-path-from-shell-initialize)))
 
 ;; 2. Dired (Файловый менеджер)
 (use-package dired
@@ -30,19 +30,22 @@
          ("C-c i" . dired-gitignore-mode))
   :config
   ;; Опционально: включить глобально во всех dired-буферах
-  (dired-gitignore-global-mode 1))
+  (dired-gitignore-global-mode t))
 
 ;; 3. Git Client (Magit)
 (use-package magit
-  :ensure t)
+  :ensure t
+  :defer t)
 
 ;; 4. Terminal Emulator
 (use-package vterm
-  :ensure t)
+  :ensure t
+  :defer t)
 
 ;; 5. Search Tools (Ripgrep wrapper)
 (use-package rg
   :ensure t
+  :defer t
   :custom
   (dired-bind-jump nil) ;; Отключаем конфликт биндингов, если есть
   (rg-enable-default-bindings))

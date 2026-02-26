@@ -45,5 +45,11 @@
 (defvar native-comp-async-report-warnings-errors)
 (setq native-comp-async-report-warnings-errors nil)
 
+;; Becnhmarking
+(use-package benchmark-init
+  :ensure t
+  :config
+  (benchmark-init/activate))
+
 (provide 'core-package)
 ;;; core-package.el ends here

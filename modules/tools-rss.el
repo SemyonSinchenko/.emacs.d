@@ -10,14 +10,12 @@
 
 (require 'seq)
 (require 'subr-x)
-(require 'elfeed)
-(require 'elfeed-db)
-(require 'gptel)
 
 ;; --- 0. Базовая установка Elfeed + Elfeed-Org ---
 
 (use-package elfeed
   :ensure t
+  :defer t
   :bind ("C-x w" . elfeed)
   :config
   (setq elfeed-db-directory (expand-file-name "elfeed" user-emacs-directory))
@@ -26,6 +24,7 @@
 
 (use-package elfeed-org
   :ensure t
+  :defer t
   :after elfeed
   :config
   (elfeed-org)

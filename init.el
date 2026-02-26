@@ -8,7 +8,7 @@
 ;;; Code:
 
 ;; 1. Ускоряем старт (увеличиваем порог сборщика мусора)
-(setq gc-cons-threshold (* 50 1000 1000))
+(setq gc-cons-threshold (* 150 1000 1000))
 
 ;; 2. Определяем пути
 (defvar my-modules-dir (expand-file-name "modules" user-emacs-directory))
@@ -25,7 +25,6 @@
 
 ;; 4. ЗАГРУЗКА МОДУЛЕЙ
 ;; Порядок важен: сначала пакетный менеджер, потом UI, потом остальное
-
 (require 'core-package)    ;; Самый важный: MELPA и use-package
 (require 'core-ui)         ;; Внешний вид
 (require 'core-keys)       ;; Общие клавиши

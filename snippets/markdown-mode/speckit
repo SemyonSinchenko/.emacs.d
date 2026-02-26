@@ -1,25 +1,33 @@
 # -*- mode: snippet -*-
-# name: Spec-Kit Markdown Template
+# name: OpenSpec Proposal Template
 # key: speckit
 # --
 # ${1:Feature Name}
 
-## 1. Context & Problem
-* ${2:Why are we building this?}
+## Context & Problem
+${2:Why are we building this? What is the business value?}
 
-## 2. Expected Behavior
-* ${3:What exactly should the system do?}
+## Expected Behavior
+${3:Describe the "Happy Path". What exactly should the system do?}
 
-## 3. User Flow
-1. ${4:User does X...}
+## User / System Flow
+1. ${4:Step 1: User/System triggers X...}
+2. $5
 
-## 4. Out of Scope
-* ${5:What are we strictly NOT doing?}
+## Technical Constraints & Pointers
+> [!NOTE] 
+> AI Guidelines for design.md generation.
+* **Target Domain/Files:** ${6:Which existing files or modules should be modified? e.g., src/api/auth.ts}
+* **Restrictions:** ${7:e.g., Strictly use native fetch, do NOT add new npm dependencies.}
 
-## 5. Edge Cases
-* ${6:What if...}
+## Out of Scope
+* ${8:What are we strictly NOT doing? (Crucial to prevent AI over-engineering)}
 
-## 6. Acceptance Criteria
-* [ ] ${7:Criterion 1}
+## Edge Cases & Error Handling
+* **If ${9:condition/failure}:** ${10:System should do Y...}
+
+## Acceptance Criteria
+* [ ] ${11:Criterion 1 (AI will use these to generate tasks.md)}
+* [ ] $12
 
 $0

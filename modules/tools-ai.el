@@ -22,6 +22,7 @@
 ;; 2. Настройка GPTel
 (use-package gptel
   :ensure t
+  :defer t
   :config
   (setq gptel-model 'qwen/qwen3-coder-next
         gptel-backend
