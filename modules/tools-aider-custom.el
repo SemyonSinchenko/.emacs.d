@@ -97,10 +97,17 @@ Always opens in the right window of a split, or creates a split if needed."
          (buffer-name (format "*aider:%s*" (file-name-nondirectory (directory-file-name root))))
          (current-window (selected-window)))
 
-    ;; If window is already split (has a right neighbor), use it; otherwise split right
-    (if (window-right current-window)
-        (select-window (window-right current-window))
-      (select-window (split-window-right)))
+    ;; 1. Current window has a right neighbor → use it
+    ;; 2. Current window has a left neighbor (we're already the right window) → stay put
+    ;; 3. No neighbors at all → split right and use the new window
+    (cond
+     ((window-right current-window)
+      (select-window (window-right current-window)))
+     ((window-left current-window)
+      ;; We are already the right window, stay here
+      )
+     (t
+      (select-window (split-window-right))))
 
     ;; Create or switch to the Aider buffer in this window
     (switch-to-buffer (vterm buffer-name))
