@@ -109,10 +109,12 @@ Always opens in the right window of a split, or creates a split if needed."
      (t
       (select-window (split-window-right))))
 
-    ;; Create or switch to the Aider buffer in this window
-    (switch-to-buffer (vterm buffer-name))
-    (vterm-send-string (format "cd %s\n" root))
-    (vterm-send-string (concat (my/aider-get-command) "\n"))))
+    ;; If buffer already exists, just switch to it; otherwise create and launch aider
+    (if (get-buffer buffer-name)
+        (switch-to-buffer buffer-name)
+      (switch-to-buffer (vterm buffer-name))
+      (vterm-send-string (format "cd %s\n" root))
+      (vterm-send-string (concat (my/aider-get-command) "\n")))))
 
 (with-eval-after-load 'vterm
   (define-key vterm-mode-map (kbd "S-<return>")
