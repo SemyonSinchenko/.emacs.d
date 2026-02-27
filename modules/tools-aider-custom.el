@@ -33,7 +33,7 @@
   :type 'string
   :group 'my-aider)
 
-(defcustom my-aider-weak-model "qwen/qwen3-235b-a22b-2507"
+(defcustom my-aider-weak-model "qwen/qwen3.5-flash-02-23"
   "Weak model (--weak-model) for simple tasks."
   :type 'string
   :group 'my-aider)
