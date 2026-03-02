@@ -11,6 +11,7 @@
 
 (require 'project)
 (require 'cl-lib)
+(require 'transient)
 
 (defgroup my-aider nil
   "Custom Aider configuration."
@@ -63,7 +64,7 @@
   "Build the full aider command string.
 ALWAYS: aider --architect --model <ARCHITECT> --editor-model <EDITOR> ..."
   (let ((cmd (list my-aider-program)))
-    
+
     ;; 1. Включаем режим архитектора всегда
     (push "--architect" cmd)
 
@@ -71,7 +72,7 @@ ALWAYS: aider --architect --model <ARCHITECT> --editor-model <EDITOR> ..."
     (when (and my-aider-architect-model (not (string-empty-p my-aider-architect-model)))
       (push "--model" cmd)
       (push (my/aider--format-model my-aider-architect-model) cmd))
-    
+
     ;; 3. Editor Model
     (when (and my-aider-editor-model (not (string-empty-p my-aider-editor-model)))
       (push "--editor-model" cmd)
@@ -84,7 +85,7 @@ ALWAYS: aider --architect --model <ARCHITECT> --editor-model <EDITOR> ..."
 
     ;; Остальные аргументы
     (setq cmd (append (reverse cmd) my-aider-args))
-    
+
     ;; Собираем в строку
     (mapconcat #'identity cmd " ")))
 
@@ -118,9 +119,55 @@ Always opens in the right window of a split, or creates a split if needed."
 
 (with-eval-after-load 'vterm
   (define-key vterm-mode-map (kbd "S-<return>")
-	      (lambda ()
-		(interactive)
-		(vterm-insert "\n"))))
+              (lambda ()
+                (interactive)
+                (vterm-insert "\n"))))
+
+;; --- 3. Transient Menu ---
+
+(defun my/aider--get-buffer ()
+  "Return the active aider vterm buffer for the current project, or nil."
+  (let* ((project (project-current nil))
+         (root (if project (project-root project) default-directory))
+         (buffer-name (format "*aider:%s*" (file-name-nondirectory (directory-file-name root)))))
+    (get-buffer buffer-name)))
+
+(defun my/aider--send-to-session (str)
+  "Send STR to the active aider vterm buffer."
+  (if-let ((buf (my/aider--get-buffer)))
+      (with-current-buffer buf
+        (vterm-send-string (concat str "\n")))
+    (user-error "No active Aider session for this project")))
+
+(defun my/aider--read-project-file (prompt)
+  "Prompt for a file in the current project with PROMPT, return relative path."
+  (let* ((project (project-current t))
+         (root (project-root project))
+         (files (project-files project))
+         (relative-files (mapcar (lambda (f) (file-relative-name f root)) files))
+         (chosen (completing-read prompt relative-files nil t)))
+    chosen))
+
+(defun my/aider-add-file ()
+  "Send /add <file> to the active Aider session."
+  (interactive)
+  (let ((file (my/aider--read-project-file "Add file to Aider: ")))
+    (my/aider--send-to-session (concat "/add " file))))
+
+(defun my/aider-add-readonly-file ()
+  "Send /read-only <file> to the active Aider session."
+  (interactive)
+  (let ((file (my/aider--read-project-file "Add read-only file to Aider: ")))
+    (my/aider--send-to-session (concat "/read-only " file))))
+
+(transient-define-prefix my/aider-menu ()
+  "Aider command menu."
+  ["Aider"
+   ["Session"
+    ("r" "Run Aider" my/aider-run)]
+   ["Files"
+    ("a" "Add file" my/aider-add-file)
+    ("R" "Add read-only file" my/aider-add-readonly-file)]])
 
 (provide 'tools-aider-custom)
 ;;; tools-aider-custom.el ends here
