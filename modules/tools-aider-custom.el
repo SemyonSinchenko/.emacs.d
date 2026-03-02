@@ -183,6 +183,8 @@ Always opens in the right window of a split, or creates a split if needed."
          (lambda (buffer)
            (when (buffer-live-p buffer)
              (let ((win (get-buffer-window buffer)))
+               (when-let ((proc (get-buffer-process buffer)))
+                 (set-process-query-on-exit-flag proc nil))
                (kill-buffer buffer)
                (when (and win (window-live-p win))
                  (delete-window win)))))
