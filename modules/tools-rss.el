@@ -24,7 +24,6 @@
 
 (use-package elfeed-org
   :ensure t
-  :defer t
   :after elfeed
   :config
   (elfeed-org)

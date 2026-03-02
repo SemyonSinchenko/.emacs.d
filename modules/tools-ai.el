@@ -61,7 +61,7 @@ Provide a top-level overview of the changes and highlight anything that may requ
     (keymap-set map "x" #'gptel-context-remove-all)
     (keymap-set map "q" #'gptel-abort)
     (keymap-set map "d" #'my/llm-smart-diff)          ; из llm-diff.el
-    (keymap-set map "a" #'my/aider-run)               ; aider
+    (keymap-set map "a" #'my/aider-menu)              ; aider
     map)
   "My key customizations for AI.")
 

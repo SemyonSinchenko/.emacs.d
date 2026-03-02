@@ -34,7 +34,7 @@
   :type 'string
   :group 'my-aider)
 
-(defcustom my-aider-weak-model "qwen/qwen3.5-flash-02-23"
+(defcustom my-aider-weak-model "stepfun/step-3.5-flash"
   "Weak model (--weak-model) for simple tasks."
   :type 'string
   :group 'my-aider)
@@ -160,14 +160,46 @@ Always opens in the right window of a split, or creates a split if needed."
   (let ((file (my/aider--read-project-file "Add read-only file to Aider: ")))
     (my/aider--send-to-session (concat "/read-only " file))))
 
+(defun my/aider-clear ()
+  "Send /clear to the active Aider session to clear the conversation history."
+  (interactive)
+  (my/aider--send-to-session "/clear"))
+
+(defun my/aider-drop ()
+  "Send /drop to the active Aider session to remove all files from context."
+  (interactive)
+  (my/aider--send-to-session "/drop"))
+
+(defun my/aider-exit ()
+  "Send /exit to the active Aider session, then kill its buffer and window."
+  (interactive)
+  (if-let ((buf (my/aider--get-buffer)))
+      (progn
+        (with-current-buffer buf
+          (vterm-send-string "/exit\n"))
+        ;; Give aider a moment to exit cleanly before killing the buffer
+        (run-with-timer
+         0.5 nil
+         (lambda (buffer)
+           (when (buffer-live-p buffer)
+             (let ((win (get-buffer-window buffer)))
+               (kill-buffer buffer)
+               (when (and win (window-live-p win))
+                 (delete-window win)))))
+         buf))
+    (user-error "No active Aider session for this project")))
+
 (transient-define-prefix my/aider-menu ()
   "Aider command menu."
   ["Aider"
    ["Session"
-    ("r" "Run Aider" my/aider-run)]
+    ("r" "Run Aider" my/aider-run)
+    ("c" "Clear history" my/aider-clear)
+    ("x" "Exit" my/aider-exit)]
    ["Files"
     ("a" "Add file" my/aider-add-file)
-    ("R" "Add read-only file" my/aider-add-readonly-file)]])
+    ("R" "Add read-only file" my/aider-add-readonly-file)
+    ("d" "Drop context" my/aider-drop)]])
 
 (provide 'tools-aider-custom)
 ;;; tools-aider-custom.el ends here

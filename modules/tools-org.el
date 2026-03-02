@@ -31,7 +31,7 @@
    ("C-c n i" . org-roam-node-insert))
   :config
   (org-roam-db-autosync-mode)
-  (org-roam-directory "/var/home/sem/Nextcloud/ORG/orgnote/"))
+  (setq org-roam-directory "/var/home/sem/Nextcloud/ORG/orgnote/"))
 
 ;; Зависимости для UI (обычно подтягиваются сами, но можно оставить для явности)
 (use-package websocket :ensure t :after org-roam)
