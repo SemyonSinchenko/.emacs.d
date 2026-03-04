@@ -10,7 +10,13 @@
 ;; 1. Ускоряем старт (увеличиваем порог сборщика мусора)
 (setq gc-cons-threshold (* 150 1000 1000))
 
-;; 2. Определяем пути
+;; 2. Suppress startup screen and welcome messages
+(setq inhibit-startup-screen t
+      inhibit-startup-message t
+      inhibit-startup-echo-area-message (user-login-name)
+      initial-scratch-message nil)
+
+;; 3. Определяем пути
 (defvar my-modules-dir (expand-file-name "modules" user-emacs-directory))
 (defvar my-lisp-dir (expand-file-name "lisp" user-emacs-directory))
 
@@ -18,12 +24,12 @@
 (add-to-list 'load-path my-modules-dir)
 (add-to-list 'load-path my-lisp-dir)
 
-;; 3. Файл для авто-генерируемых настроек (чтобы не пачкать init.el)
+;; 4. Файл для авто-генерируемых настроек (чтобы не пачкать init.el)
 (setq custom-file (expand-file-name "custom.el" user-emacs-directory))
 (when (file-exists-p custom-file)
   (load custom-file))
 
-;; 4. ЗАГРУЗКА МОДУЛЕЙ
+;; 5. ЗАГРУЗКА МОДУЛЕЙ
 ;; Порядок важен: сначала пакетный менеджер, потом UI, потом остальное
 (require 'core-package)    ;; Самый важный: MELPA и use-package
 (require 'core-ui)         ;; Внешний вид
@@ -42,7 +48,7 @@
 ;; ИИ-ассистент
 (require 'tools-rss)
 
-;; 5. Возвращаем GC в норму
+;; 6. Возвращаем GC в норму
 (setq gc-cons-threshold (* 2 1000 1000))
 
 (message "Emacs init loaded successfully!")
