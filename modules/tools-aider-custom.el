@@ -6,6 +6,7 @@
 ;; - --model is set to the Architect model.
 ;; - --editor-model is set to the Editor model.
 ;; - Window logic: Smart split (like Magit/display-buffer).
+;; Uses Alibaba Coding Plan (DashScope) as the backend.
 
 ;;; Code:
 
@@ -17,25 +18,30 @@
   "Custom Aider configuration."
   :group 'tools)
 
-;; --- 1. Настройки моделей ---
+;; --- 1. Model settings ---
 
 (defcustom my-aider-program "aider"
   "Path to the aider executable."
   :type 'string
   :group 'my-aider)
 
-(defcustom my-aider-architect-model "anthropic/claude-sonnet-4.6"
-  "The \='Thinking' model.  In architect mode, this is passed as --model."
+(defcustom my-aider-architect-model "openai/qwen3.5-plus"
+  "The 'Thinking' model.  In architect mode, this is passed as --model."
   :type 'string
   :group 'my-aider)
 
-(defcustom my-aider-editor-model "anthropic/claude-sonnet-4.6"
-  "The \='Coding' model.  Passed as --editor-model."
+(defcustom my-aider-editor-model "openai/qwen3.5-plus"
+  "The 'Coding' model.  Passed as --editor-model."
   :type 'string
   :group 'my-aider)
 
-(defcustom my-aider-weak-model "stepfun/step-3.5-flash"
+(defcustom my-aider-weak-model "openai/qwen3.5-plus"
   "Weak model (--weak-model) for simple tasks."
+  :type 'string
+  :group 'my-aider)
+
+(defcustom my-aider-api-base "https://coding-intl.dashscope.aliyuncs.com/v1"
+  "The OpenAI-compatible API base URL for Alibaba Coding Plan."
   :type 'string
   :group 'my-aider)
 
@@ -45,48 +51,52 @@
     "--no-git-commit-verify"        ;; No hooks
     "--dark-mode"                   ;; Enable dark mode for terminal
     "--no-gui"                      ;; Disable TUI
-    "--show-model-warnings"         ;; Показывать стоимость
-    "--show-diffs")                 ;; Показывать текстовый дифф
+    "--show-model-warnings"         ;; Show model warnings
+    "--show-diffs"                  ;; Show text diffs
+    "--multiline"                   ;; Enable multiline input mode
+    "--edit-format" "diff"          ;; Use diff edit format
+    "--editor-edit-format" "diff")  ;; Use diff edit format for editor
   "List of additional arguments to pass to aider."
   :type '(repeat string)
   :group 'my-aider)
 
-;; --- 2. Логика запуска ---
-
-(defun my/aider--format-model (model)
-  "Ensures MODEL name start with openrouter/ if it's not a local one."
-  (if (or (string-empty-p model)
-          (string-prefix-p "openrouter/" model))
-      model
-    (concat "openrouter/" model)))
+;; --- 2. Launch logic ---
 
 (defun my/aider-get-command ()
   "Build the full aider command string.
-ALWAYS: aider --architect --model <ARCHITECT> --editor-model <EDITOR> ..."
-  (let ((cmd (list my-aider-program)))
+ALWAYS: aider --architect --model <ARCHITECT> --editor-model <EDITOR> ...
+Uses Alibaba Coding Plan API with key from BAILIAN_CODING_PLAN_API_KEY env var."
+  (let* ((api-key (or (getenv "BAILIAN_CODING_PLAN_API_KEY") ""))
+         (cmd (list my-aider-program)))
 
-    ;; 1. Включаем режим архитектора всегда
+    ;; 1. API base and key
+    (push "--openai-api-base" cmd)
+    (push my-aider-api-base cmd)
+    (push "--openai-api-key" cmd)
+    (push api-key cmd)
+
+    ;; 2. Always enable architect mode
     (push "--architect" cmd)
 
-    ;; 2. Architect Model (идет как --model)
+    ;; 3. Architect Model (passed as --model)
     (when (and my-aider-architect-model (not (string-empty-p my-aider-architect-model)))
       (push "--model" cmd)
-      (push (my/aider--format-model my-aider-architect-model) cmd))
+      (push my-aider-architect-model cmd))
 
-    ;; 3. Editor Model
+    ;; 4. Editor Model
     (when (and my-aider-editor-model (not (string-empty-p my-aider-editor-model)))
       (push "--editor-model" cmd)
-      (push (my/aider--format-model my-aider-editor-model) cmd))
+      (push my-aider-editor-model cmd))
 
-    ;; 4. Weak Model
+    ;; 5. Weak Model
     (when (and my-aider-weak-model (not (string-empty-p my-aider-weak-model)))
       (push "--weak-model" cmd)
-      (push (my/aider--format-model my-aider-weak-model) cmd))
+      (push my-aider-weak-model cmd))
 
-    ;; Остальные аргументы
+    ;; Remaining arguments
     (setq cmd (append (reverse cmd) my-aider-args))
 
-    ;; Собираем в строку
+    ;; Join into a string
     (mapconcat #'identity cmd " ")))
 
 (defun my/aider-run ()
