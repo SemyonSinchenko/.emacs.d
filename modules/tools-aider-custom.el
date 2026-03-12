@@ -42,17 +42,24 @@
   :type 'string
   :group 'my-aider)
 
+(defvar my-aider--metadata-file
+  (expand-file-name
+   "../aider-meta/metadata.json"
+   (file-name-directory (or load-file-name buffer-file-name)))
+  "Absolute path to the aider model metadata JSON file.")
+
 (defcustom my-aider-args
-  '("--no-attribute-co-authored-by" ;; No git attribute
-    "--no-analytics"                ;; Disable analytics
-    "--no-git-commit-verify"        ;; No hooks
-    "--dark-mode"                   ;; Enable dark mode for terminal
-    "--no-gui"                      ;; Disable TUI
-    "--show-model-warnings"         ;; Show model warnings
-    "--show-diffs"                  ;; Show text diffs
-    "--multiline"                   ;; Enable multiline input mode
-    "--edit-format" "diff"          ;; Use diff edit format
-    "--editor-edit-format" "diff")  ;; Use diff edit format for editor
+  (list
+   "--no-attribute-co-authored-by" ;; No git attribute
+   "--no-analytics"                ;; Disable analytics
+   "--no-git-commit-verify"        ;; No hooks
+   "--dark-mode"                   ;; Enable dark mode for terminal
+   "--no-gui"                      ;; Disable TUI
+   "--show-model-warnings"         ;; Show model warnings
+   "--show-diffs"                  ;; Show text diffs
+   "--edit-format" "diff"          ;; Use diff edit format
+   "--editor-edit-format" "diff"   ;; Use diff edit format for editor
+   "--model-metadata-file" my-aider--metadata-file) ;; Custom model metadata
   "List of additional arguments to pass to aider."
   :type '(repeat string)
   :group 'my-aider)
