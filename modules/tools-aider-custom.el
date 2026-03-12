@@ -26,12 +26,12 @@
   :group 'my-aider)
 
 (defcustom my-aider-architect-model "openai/qwen3.5-plus"
-  "The \='Thinking\=' model.  In architect mode, this is passed as --model."
+  "The 'Thinking' model.  In architect mode, this is passed as --model."
   :type 'string
   :group 'my-aider)
 
 (defcustom my-aider-editor-model "openai/qwen3.5-plus"
-  "The \='Coding\=' model.  Passed as --editor-model."
+  "The 'Coding' model.  Passed as --editor-model."
   :type 'string
   :group 'my-aider)
 
@@ -67,34 +67,25 @@
 ALWAYS: aider --architect --model <ARCHITECT> --editor-model <EDITOR> ...
 Uses Alibaba Coding Plan API with key from BAILIAN_CODING_PLAN_API_KEY env var."
   (let* ((api-key (or (getenv "BAILIAN_CODING_PLAN_API_KEY") ""))
-         (cmd (list my-aider-program)))
+         (cmd (list my-aider-program
+                    "--openai-api-base" my-aider-api-base
+                    "--openai-api-key"  api-key
+                    "--architect")))
 
-    ;; 1. API base and key
-    (push "--openai-api-base" cmd)
-    (push my-aider-api-base cmd)
-    (push "--openai-api-key" cmd)
-    (push api-key cmd)
-
-    ;; 2. Always enable architect mode
-    (push "--architect" cmd)
-
-    ;; 3. Architect Model (passed as --model)
+    ;; Architect Model (passed as --model)
     (when (and my-aider-architect-model (not (string-empty-p my-aider-architect-model)))
-      (push "--model" cmd)
-      (push my-aider-architect-model cmd))
+      (setq cmd (append cmd (list "--model" my-aider-architect-model))))
 
-    ;; 4. Editor Model
+    ;; Editor Model
     (when (and my-aider-editor-model (not (string-empty-p my-aider-editor-model)))
-      (push "--editor-model" cmd)
-      (push my-aider-editor-model cmd))
+      (setq cmd (append cmd (list "--editor-model" my-aider-editor-model))))
 
-    ;; 5. Weak Model
+    ;; Weak Model
     (when (and my-aider-weak-model (not (string-empty-p my-aider-weak-model)))
-      (push "--weak-model" cmd)
-      (push my-aider-weak-model cmd))
+      (setq cmd (append cmd (list "--weak-model" my-aider-weak-model))))
 
     ;; Remaining arguments
-    (setq cmd (append (reverse cmd) my-aider-args))
+    (setq cmd (append cmd my-aider-args))
 
     ;; Join into a string
     (mapconcat #'identity cmd " ")))
