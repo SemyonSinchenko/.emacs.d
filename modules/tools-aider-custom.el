@@ -26,12 +26,12 @@
   :group 'my-aider)
 
 (defcustom my-aider-architect-model "openai/qwen3.5-plus"
-  "The 'Thinking' model.  In architect mode, this is passed as --model."
+  "The \='Thinking\=' model.  In architect mode, this is passed as --model."
   :type 'string
   :group 'my-aider)
 
 (defcustom my-aider-editor-model "openai/qwen3.5-plus"
-  "The 'Coding' model.  Passed as --editor-model."
+  "The \='Coding\=' model.  Passed as --editor-model."
   :type 'string
   :group 'my-aider)
 
