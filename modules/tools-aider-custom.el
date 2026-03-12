@@ -7,6 +7,8 @@
 ;; - --editor-model is set to the Editor model.
 ;; - Window logic: Smart split (like Magit/display-buffer).
 ;; Uses Alibaba Coding Plan (DashScope) as the backend.
+;; API base and key are handled via environment variables (OPENAI_API_BASE,
+;; BAILIAN_CODING_PLAN_API_KEY etc.) set globally in the shell profile.
 
 ;;; Code:
 
@@ -40,11 +42,6 @@
   :type 'string
   :group 'my-aider)
 
-(defcustom my-aider-api-base "https://coding-intl.dashscope.aliyuncs.com/v1"
-  "The OpenAI-compatible API base URL for Alibaba Coding Plan."
-  :type 'string
-  :group 'my-aider)
-
 (defcustom my-aider-args
   '("--no-attribute-co-authored-by" ;; No git attribute
     "--no-analytics"                ;; Disable analytics
@@ -65,11 +62,8 @@
 (defun my/aider-get-command ()
   "Build the full aider command string.
 ALWAYS: aider --architect --model <ARCHITECT> --editor-model <EDITOR> ...
-Uses Alibaba Coding Plan API with key from BAILIAN_CODING_PLAN_API_KEY env var."
-  (let* ((api-key (or (getenv "BAILIAN_CODING_PLAN_API_KEY") ""))
-         (cmd (list my-aider-program
-                    "--openai-api-base" my-aider-api-base
-                    "--openai-api-key"  api-key
+API credentials are expected to be set via environment variables."
+  (let* ((cmd (list my-aider-program
                     "--architect")))
 
     ;; Architect Model (passed as --model)
