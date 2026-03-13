@@ -24,14 +24,14 @@
 
 (use-package org-roam
   :ensure t
-  :defer t
+  :custom
+  (org-roam-directory (file-truename "/var/home/sem/Nextcloud/ORG/kb/"))
   :bind
   ;; Стандартные клавиши для быстрого поиска и создания заметок
   (("C-c n f" . org-roam-node-find)
    ("C-c n i" . org-roam-node-insert))
   :config
-  (org-roam-db-autosync-mode)
-  (setq org-roam-directory "/var/home/sem/Nextcloud/ORG/orgnote/"))
+  (org-roam-db-autosync-mode))
 
 ;; Зависимости для UI (обычно подтягиваются сами, но можно оставить для явности)
 (use-package websocket :ensure t :after org-roam)
@@ -46,6 +46,14 @@
         org-roam-ui-follow t
         org-roam-ui-update-on-save t
         org-roam-ui-open-on-start nil))
+
+;; --- 3. URL Catcher (LLM-assisted article capture) ---
+
+;; Load after org-roam and gptel
+(use-package org-roam-url-catcher
+  :ensure nil
+  :load-path "lisp/org-roam-url-catcher.el"
+  :bind (("C-c n u" . my/collect-url)))
 
 ;; --- 4. Telega ---
 (use-package telega

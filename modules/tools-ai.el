@@ -24,7 +24,7 @@
   :ensure t
   :defer t
   :config
-  (setq gptel-model 'qwen/qwen3-coder-next
+  (setq gptel-model 'qwen/qwen3.5-397b-a17b
         gptel-backend
         (gptel-make-openai "OpenRouter"
           :host "openrouter.ai"
@@ -32,6 +32,7 @@
           :stream t
           :key (my-get-openrouter-api-key)
           :models '(
+		    "qwen/qwen3.5-397b-a17b"
 		    "deepseek/deepseek-v3.2"
 		    "qwen/qwen3-coder-next")
           :request-params '(:reasoning (:enabled :json-false))))
