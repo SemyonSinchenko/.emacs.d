@@ -59,3 +59,6 @@ persist/
 projects
 .cecli*
 elfeed/
+
+#
+.qwen
