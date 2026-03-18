@@ -48,6 +48,12 @@ Provide a top-level overview of the changes and highlight anything that may requ
 ;; 3. Aider
 (require 'tools-aider-custom)
 
+;; Agent-shell integration
+(use-package agent-shell
+  :config
+  (setq agent-shell-qwen-authentication
+      (agent-shell-qwen-make-authentication :none t)))
+
 ;; Использует функции из lisp/ai-utils.el и lisp/llm-diff.el
 (defvar my-gptel-map
   (let ((map (make-sparse-keymap)))

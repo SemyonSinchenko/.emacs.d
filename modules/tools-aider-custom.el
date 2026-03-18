@@ -1,4 +1,4 @@
-;;; tools-aider-custom.el --- Custom CLI wrapper for Aider via Vterm -*- lexical-binding: t; -*-
+;;; tools-aider-custom.el --- Custom CLI wrapper for Aider via Eat -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; A lightweight wrapper around 'aider' CLI.
@@ -92,12 +92,13 @@ API credentials are expected to be set via environment variables."
     (mapconcat #'identity cmd " ")))
 
 (defun my/aider-run ()
-  "Open Aider vterm buffer in the project root.
+  "Open Aider eat buffer in the project root.
 Always opens in the right window of a split, or creates a split if needed."
   (interactive)
   (let* ((project (project-current nil))
          (root (if project (project-root project) default-directory))
          (buffer-name (format "*aider:%s*" (file-name-nondirectory (directory-file-name root))))
+         (eat-name (substring buffer-name 1 -1))
          (current-window (selected-window)))
 
     ;; 1. Current window has a right neighbor → use it
@@ -115,30 +116,37 @@ Always opens in the right window of a split, or creates a split if needed."
     ;; If buffer already exists, just switch to it; otherwise create and launch aider
     (if (get-buffer buffer-name)
         (switch-to-buffer buffer-name)
-      (switch-to-buffer (vterm buffer-name))
-      (vterm-send-string (format "cd %s\n" root))
-      (vterm-send-string (concat (my/aider-get-command) "\n")))))
+      (eat-make eat-name shell-file-name)
+      (switch-to-buffer buffer-name)
+      (run-with-timer
+       0.3 nil
+       (lambda (buf r cmd)
+         (when (buffer-live-p buf)
+           (with-current-buffer buf
+             (eat-term-send-string eat-terminal (format "cd %s\n" r))
+             (eat-term-send-string eat-terminal (concat cmd "\n")))))
+       (get-buffer buffer-name) root (my/aider-get-command)))))
 
-(with-eval-after-load 'vterm
-  (define-key vterm-mode-map (kbd "S-<return>")
+(with-eval-after-load 'eat
+  (define-key eat-semi-char-mode-map (kbd "S-<return>")
               (lambda ()
                 (interactive)
-                (vterm-insert "\n"))))
+                (eat-self-input 1 ?\n))))
 
 ;; --- 3. Transient Menu ---
 
 (defun my/aider--get-buffer ()
-  "Return the active aider vterm buffer for the current project, or nil."
+  "Return the active aider eat buffer for the current project, or nil."
   (let* ((project (project-current nil))
          (root (if project (project-root project) default-directory))
          (buffer-name (format "*aider:%s*" (file-name-nondirectory (directory-file-name root)))))
     (get-buffer buffer-name)))
 
 (defun my/aider--send-to-session (str)
-  "Send STR to the active aider vterm buffer."
+  "Send STR to the active aider eat buffer."
   (if-let ((buf (my/aider--get-buffer)))
       (with-current-buffer buf
-        (vterm-send-string (concat str "\n")))
+        (eat-term-send-string eat-terminal (concat str "\n")))
     (user-error "No active Aider session for this project")))
 
 (defun my/aider--read-project-file (prompt)
@@ -178,7 +186,7 @@ Always opens in the right window of a split, or creates a split if needed."
   (if-let ((buf (my/aider--get-buffer)))
       (progn
         (with-current-buffer buf
-          (vterm-send-string "/exit\n"))
+          (eat-term-send-string eat-terminal "/exit\n"))
         ;; Give aider a moment to exit cleanly before killing the buffer
         (run-with-timer
          0.5 nil

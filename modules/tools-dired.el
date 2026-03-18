@@ -2,7 +2,7 @@
 
 ;;; Commentary:
 ;; This module contains configuration for Dired, Git (Magit),
-;; Terminal (Vterm), and Projectile.
+;; Terminal (Eat), and Projectile.
 
 ;;; Code:
 
@@ -38,9 +38,8 @@
   :defer t)
 
 ;; 4. Terminal Emulator
-(use-package vterm
-  :ensure t
-  :defer t)
+(use-package eat
+  :ensure t)
 
 ;; 5. Search Tools (Ripgrep wrapper)
 (use-package rg
