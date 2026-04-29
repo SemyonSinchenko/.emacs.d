@@ -22,7 +22,8 @@
 ;; 3. Ace-window (Быстрое переключение окон)
 (use-package ace-window
   :ensure t
-  :bind ("M-o" . ace-window))
+  :bind (("M-o" . ace-window)
+         ("C-x o" . ace-window)))
 
 ;; 4. XClip (Общий буфер обмена с Linux)
 (use-package xclip

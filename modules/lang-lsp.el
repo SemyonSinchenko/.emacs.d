@@ -2,20 +2,16 @@
 
 ;;; Commentary:
 ;; Configures Eglot (LSP client), Tree-sitter for highlighting,
-;; Flycheck for linting, and Apheleia for formatting.
+;; Flymake for linting, and Apheleia for formatting.
 
 ;;; Code:
 
-;; 0. Компиляторные подсказки (чтобы Flycheck не ругался на неизвестные функции)
 ;; Сообщаем, что эта функция живет в core-completion.el
 (declare-function my/eglot-capf "core-completion")
 ;; Сообщаем, что эти функции живут в eglot.el
 (declare-function eglot-code-actions "eglot")
 (declare-function eglot-format-buffer "eglot")
 (declare-function eglot-rename "eglot")
-;; Сообщаем, что эта функция живет в flycheck.el
-(declare-function flycheck-add-next-checker "flycheck")
-
 
 ;; 1. Tree-sitter (Встроенный в Emacs 29+)
 ;; Мы используем treesit-auto, чтобы он сам скачал грамматики
@@ -53,42 +49,10 @@
 
 (keymap-global-set "C-x M-." my-eglot-map)
 
-
-;; 3. Flycheck (Линтинг)
-(use-package flycheck
-  :ensure t
-  :init
-  (global-flycheck-mode 1)
-  :config
-  ;; РАЗРЕШАЕМ: flycheck-checker можно безопасно менять через dir-locals,
-  ;; если значение — это символ (например, 'python-ruff)
-  (put 'flycheck-checker 'safe-local-variable #'symbolp))
-
-(use-package flycheck-eglot
-  :ensure t
-  :after (flycheck eglot)
-  :custom
-  (flycheck-eglot-exclusive nil)
-  :config
-  (global-flycheck-eglot-mode 1)
-  
-  ;; Настраиваем цепочки (Ruff -> Eglot)
-  (flycheck-add-next-checker 'python-ruff 'eglot-check)
-  (flycheck-add-next-checker 'python-flake8 'eglot-check)
-
-  ;; --- ИСПРАВЛЕНИЕ v2 (Асинхронное) ---
-  (add-hook 'eglot-managed-mode-hook
-            (lambda ()
-	      ;; Используем run-at-time 0, чтобы код выполнился
-	      ;; на следующем цикле событий (после того как Eglot полностью загрузится)
-	      (run-at-time 0 nil
-                           (lambda ()
-                             ;; Ищем, устанавливали ли мы flycheck-checker в dir-locals
-                             (when-let ((forced-checker (cdr (assq 'flycheck-checker dir-local-variables-alist))))
-			       ;; Если в dir-locals есть запись, принудительно возвращаем её
-			       (setq-local flycheck-checker forced-checker)
-			       ;; И перезапускаем проверку уже с правильным чекером
-			       (flycheck-buffer)))))))
+;; 3. Flymake
+(use-package flymake
+  :ensure nil
+  :hook (prog-mode . flymake-mode))
 
 ;; 4. Apheleia (Форматирование)
 (use-package apheleia

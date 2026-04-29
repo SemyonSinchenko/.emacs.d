@@ -16,50 +16,34 @@
 (require 'cl-lib)
 (require 'transient)
 
-(defgroup my-aider nil
-  "Custom Aider configuration."
-  :group 'tools)
-
-;; --- 1. Model settings ---
-
-(defcustom my-aider-program "aider"
-  "Path to the aider executable."
+(defcustom my-aider-architect-model "openrouter/anthropic/claude-sonnet-4.6"
+  "The \='Thinking' model.  In architect mode, this is passed as --model."
   :type 'string
   :group 'my-aider)
 
-(defcustom my-aider-architect-model "openai/qwen3.5-plus"
-  "The 'Thinking' model.  In architect mode, this is passed as --model."
+(defcustom my-aider-editor-model "openrouter/anthropic/claude-sonnet-4.6"
+  "The \='Coding' model.  Passed as --editor-model."
   :type 'string
   :group 'my-aider)
 
-(defcustom my-aider-editor-model "openai/qwen3.5-plus"
-  "The 'Coding' model.  Passed as --editor-model."
-  :type 'string
-  :group 'my-aider)
-
-(defcustom my-aider-weak-model "openai/qwen3.5-plus"
+(defcustom my-aider-weak-model "openrouter/openai/gpt-oss-120b"
   "Weak model (--weak-model) for simple tasks."
   :type 'string
   :group 'my-aider)
 
-(defvar my-aider--metadata-file
-  (expand-file-name
-   "../aider-meta/metadata.json"
-   (file-name-directory (or load-file-name buffer-file-name)))
-  "Absolute path to the aider model metadata JSON file.")
+(defcustom my-aider-program "COLORTERM=truecolor aider"
+  "Path to the aider executable."
+  :type 'string
+  :group 'my-aider)
 
 (defcustom my-aider-args
-  (list
-   "--no-attribute-co-authored-by" ;; No git attribute
-   "--no-analytics"                ;; Disable analytics
-   "--no-git-commit-verify"        ;; No hooks
-   "--dark-mode"                   ;; Enable dark mode for terminal
-   "--no-gui"                      ;; Disable TUI
-   "--show-model-warnings"         ;; Show model warnings
-   "--show-diffs"                  ;; Show text diffs
-   "--edit-format" "diff"          ;; Use diff edit format
-   "--editor-edit-format" "diff"   ;; Use diff edit format for editor
-   "--model-metadata-file" my-aider--metadata-file) ;; Custom model metadata
+  '("--no-attribute-co-authored-by" ;; No git attribute
+    "--no-analytics"                ;; Disable analytics
+    "--no-git-commit-verify"        ;; No hooks
+    "--dark-mode"                   ;; Enable dark mode for terminal
+    "--no-gui"                      ;; Disable TUI
+    "--show-model-warnings"         ;; Показывать стоимость
+    "--show-diffs")                 ;; Показывать текстовый дифф
   "List of additional arguments to pass to aider."
   :type '(repeat string)
   :group 'my-aider)

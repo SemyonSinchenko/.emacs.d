@@ -25,54 +25,13 @@
 (use-package org-roam
   :ensure t
   :custom
-  (org-roam-directory (file-truename "/var/home/sem/Nextcloud/ORG/kb/"))
+  (org-roam-directory (file-truename "/var/home/sem/Org/org-roam/org-files/"))
   :bind
   ;; Стандартные клавиши для быстрого поиска и создания заметок
   (("C-c n f" . org-roam-node-find)
    ("C-c n i" . org-roam-node-insert))
   :config
   (org-roam-db-autosync-mode))
-
-;; Зависимости для UI (обычно подтягиваются сами, но можно оставить для явности)
-(use-package websocket :ensure t :after org-roam)
-(use-package emacsql :ensure t :after org-roam)
-
-(use-package org-roam-ui
-  :ensure t
-  :defer t
-  :after org-roam
-  :config
-  (setq org-roam-ui-sync-theme t
-        org-roam-ui-follow t
-        org-roam-ui-update-on-save t
-        org-roam-ui-open-on-start nil))
-
-;; --- 3. URL Catcher (LLM-assisted article capture) ---
-
-;; Load after org-roam and gptel
-(use-package org-roam-url-catcher
-  :ensure nil
-  :load-path "lisp/org-roam-url-catcher.el"
-  :bind (("C-c n u" . my/collect-url)))
-
-;; --- 4. Telega ---
-(use-package telega
-  :ensure t
-  :defer t
-  :config
-  (setq telega-emoji-use-images nil)
-  (defun my/telega-chat-corfu-setup ()
-    "Setup Capf for Telega using Company engine but Corfu UI."
-    ;; 1. Грузим библиотеку company (функции), но не включаем режим
-    (require 'company)
-    
-    ;; 2. Говорим Telega использовать capf-адаптер
-    ;; Corfu автоматически подхватит эту функцию
-    (add-hook 'completion-at-point-functions
-              #'telega-chatbuf-complete-at-point nil 'local))
-
-  ;; Вешаем на хук открытия чата
-  (add-hook 'telega-chat-mode-hook #'my/telega-chat-corfu-setup))
 
 (provide 'tools-org)
 ;;; tools-org.el ends here

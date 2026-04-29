@@ -2,7 +2,7 @@
 
 ;;; Commentary:
 ;; This module contains configuration for Dired, Git (Magit),
-;; Terminal (Eat), and Projectile.
+;; Terminal, and Projectile.
 
 ;;; Code:
 
@@ -26,8 +26,8 @@
 (use-package dired-gitignore
   :ensure t
   :bind (:map dired-mode-map
-         ;; Включаем/выключаем скрытие по нажатию C-c i
-         ("C-c i" . dired-gitignore-mode))
+              ;; Включаем/выключаем скрытие по нажатию C-c i
+              ("C-c i" . dired-gitignore-mode))
   :config
   ;; Опционально: включить глобально во всех dired-буферах
   (dired-gitignore-global-mode t))
@@ -38,8 +38,16 @@
   :defer t)
 
 ;; 4. Terminal Emulator
-(use-package eat
-  :ensure t)
+(use-package ghostel
+  :ensure t
+  :custom
+  (ghostel-module-auto-install 'ask)
+  :hook
+  (ghostel-mode . (lambda ()
+                    (setq-local global-hl-line-mode nil)
+                    (hl-line-mode -1)))
+  :bind
+  ("C-c t" . ghostel))
 
 ;; 5. Search Tools (Ripgrep wrapper)
 (use-package rg

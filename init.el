@@ -7,7 +7,7 @@
 
 ;;; Code:
 
-;; 1. Ускоряем старт (увеличиваем порог сборщика мусора)
+;; 1. Speed up startup (increase garbage collection threshold)
 (setq gc-cons-threshold (* 150 1000 1000))
 
 ;; 2. Suppress startup screen and welcome messages
@@ -29,27 +29,27 @@
 (when (file-exists-p custom-file)
   (load custom-file))
 
-;; 5. ЗАГРУЗКА МОДУЛЕЙ
-;; Порядок важен: сначала пакетный менеджер, потом UI, потом остальное
-(require 'core-package)    ;; Самый важный: MELPA и use-package
-(require 'core-ui)         ;; Внешний вид
-(require 'core-keys)       ;; Общие клавиши
-(require 'core-completion) ;; Автодополнение (Vertico/Corfu)
+;; 5. MODULE LOADING
+;; Order matters: package manager first, then UI, then the rest
+(require 'core-package)    ;; Most important: MELPA and use-package
+(require 'core-ui)         ;; User interface / appearance
+(require 'core-keys)       ;; Common keybindings
+(require 'core-completion) ;; Autocompletion (Vertico/Corfu)
 
-;; Инструменты
+;; Tools
 (require 'tools-dired)     ;; Git, Projectile, Terminal
-(require 'tools-ai)        ;; Твой AI конфиг
-(require 'tools-org)       ;; Org mode и заметки
+(require 'tools-ai)        ;; Your AI config
+(require 'tools-org)       ;; Org mode and notes
 
-;; Языки и IDE функции
-(require 'lang-lsp)        ;; LSP (Eglot) и линтеры
-(require 'lang-prog)       ;; Настройки конкретных языков
-
-;; ИИ-ассистент
-(require 'tools-rss)
+;; Languages and IDE features
+(require 'lang-lsp)        ;; LSP (Eglot) and linters
+(require 'lang-prog)       ;; Language-specific settings
 
 ;; 6. Возвращаем GC в норму
 (setq gc-cons-threshold (* 2 1000 1000))
+
+;; Buffer size
+(setq read-process-output-max (* 4 1024 1024))
 
 (message "Emacs init loaded successfully!")
 
