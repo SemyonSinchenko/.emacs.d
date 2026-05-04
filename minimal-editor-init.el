@@ -60,14 +60,23 @@
 ;; Minibuffer/search flow similar to main config.
 (use-package vertico
   :init
-  (vertico-mode 1)
+  (vertico-mode)
   :custom
   (vertico-cycle t)
+  (read-buffer-completion-ignore-case t)
+  (read-file-name-completion-ignore-case t)
+  (completion-styles '(basic substring partial-completion flex))
   :bind (:map vertico-map
               ("C-n" . vertico-next)
               ("C-p" . vertico-previous)
               ("C-s" . vertico-next)
               ("C-r" . vertico-previous)))
+
+(use-package vertico-sort
+  :ensure nil
+  :after vertico
+  :custom
+  (vertico-sort-function #'vertico-sort-history-length-alpha))
 
 (use-package consult
   :bind (("C-s" . consult-line)
