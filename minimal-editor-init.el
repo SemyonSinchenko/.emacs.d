@@ -50,6 +50,9 @@
 (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
 (package-initialize)
 
+;; Prefer tree-sitter Rust mode in minimal daemon.
+(add-to-list 'auto-mode-alist '("\\.rs\\'" . rust-ts-mode))
+
 (unless (package-installed-p 'use-package)
   (package-refresh-contents)
   (package-install 'use-package))
@@ -97,6 +100,14 @@
   :defer t
   :bind (("M-o" . ace-window)
          ("C-x o" . ace-window)))
+
+;; Snippets for Markdown, reusing shared templates from ~/.emacs.d/snippets.
+(use-package yasnippet
+  :defer t
+  :hook (markdown-mode . yas-minor-mode)
+  :custom
+  (yas-snippet-dirs (list (expand-file-name "snippets"
+                                            user-emacs-directory))))
 
 ;; Clipboard integration with GNOME.
 (defun my-minimal--clipboard-backend ()
