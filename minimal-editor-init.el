@@ -109,6 +109,54 @@
   (yas-snippet-dirs (list (expand-file-name "snippets"
                                             user-emacs-directory))))
 
+;; Time tracking (enabled globally by default).
+(use-package wakatime-mode
+  :config
+  (global-wakatime-mode 1))
+
+;; CSV highlighting
+(use-package csv-mode
+  :defer t
+  :mode (("\\.csv\\'" . csv-mode)
+         ("\\.tsv\\'" . tsv-mode))
+  :bind (:map csv-mode-map
+              ("C-c C-a" . csv-align-mode)
+              ("C-c a"   . csv-align-fields)
+              ("C-c u"   . csv-unalign-fields)
+              ("C-c s"   . csv-guess-set-separator))
+  :hook ((csv-mode . my-minimal-csv-setup)
+         (tsv-mode . my-minimal-csv-setup))
+  :custom
+  (csv-align-max-width 40)
+  :config
+  (defvar my-minimal-csv-align-size-limit (* 10 1024 1024))
+
+  (defun my-minimal-csv-buffer-size ()
+    (- (point-max) (point-min)))
+
+  (defun my-minimal-csv-setup ()
+    (setq-local truncate-lines t)
+    (ignore-errors
+      (csv-guess-set-separator))
+    (when (< (my-minimal-csv-buffer-size)
+             my-minimal-csv-align-size-limit)
+      (csv-align-mode 1))))
+
+(use-package rainbow-csv
+  :after csv-mode
+  :commands (rainbow-csv-mode rainbow-csv-highlight)
+  :bind (:map csv-mode-map
+              ("C-c C-r" . rainbow-csv-mode))
+  :hook ((csv-mode . my-minimal-rainbow-csv-maybe)
+         (tsv-mode . my-minimal-rainbow-csv-maybe))
+  :config
+  (defvar my-minimal-rainbow-csv-size-limit (* 10 1024 1024))
+
+  (defun my-minimal-rainbow-csv-maybe ()
+    (when (< (my-minimal-csv-buffer-size)
+             my-minimal-rainbow-csv-size-limit)
+      (rainbow-csv-mode 1))))
+
 ;; Clipboard integration with GNOME.
 (defun my-minimal--clipboard-backend ()
   "Return clipboard backend symbol for current environment."

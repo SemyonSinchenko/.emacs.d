@@ -14,6 +14,18 @@
 ;; Важно для встроенных пакетов (Emacs 29+)
 (setq package-install-upgrade-built-in t)
 
+(setq package-archives
+      '(("gnu"      . "https://elpa.gnu.org/packages/")
+        ("nongnu"   . "https://elpa.nongnu.org/nongnu/")
+        ("melpa"    . "https://melpa.org/packages/")
+        ("jcs-elpa" . "https://jcs-emacs.github.io/jcs-elpa/packages/")))
+
+(setq package-archive-priorities
+      '(("gnu"      . 10)
+        ("nongnu"   . 10)
+        ("melpa"    . 5)
+        ("jcs-elpa" . 0)))
+
 (package-initialize)
 
 ;; 2. Обновляем список пакетов при первом запуске
