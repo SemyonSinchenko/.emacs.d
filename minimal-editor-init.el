@@ -36,6 +36,7 @@
 (electric-pair-mode 1)
 (global-font-lock-mode 1)
 (global-auto-revert-mode 1)
+(global-display-line-numbers-mode 1)
 (setq auto-revert-verbose nil)
 
 (require 'server)
@@ -158,6 +159,10 @@
       (rainbow-csv-mode 1))))
 
 ;; Clipboard integration with GNOME.
+;; XDG_RUNTIME_DIR is already present in the daemon; wl-clipboard needs only WAYLAND_DISPLAY on top of it.
+(setenv "WAYLAND_DISPLAY" (or (getenv "WAYLAND_DISPLAY") "wayland-0"))
+(setenv "DISPLAY" (or (getenv "DISPLAY") ":0"))
+
 (defun my-minimal--clipboard-backend ()
   "Return clipboard backend symbol for current environment."
   (cond

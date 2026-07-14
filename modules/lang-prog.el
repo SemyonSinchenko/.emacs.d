@@ -104,6 +104,13 @@ Run JDTLS itself on Java 21, without changing the project's own JDK."
 
 ;; --- Scala (Metals v1) ---
 
+(defcustom my-use-metals-v2 nil
+  "If non-nil, use Metals v2 (`metals-v2') instead of Metals v1 for Scala.
+Set this to t and restart Emacs (or re-`require' lang-prog) to switch.
+Fallback: set back to nil to restore the stable Metals v1 setup."
+  :type 'boolean
+  :group 'eglot)
+
 (use-package scala-mode
   :ensure t
   :interpreter ("scala" . scala-mode)
@@ -145,6 +152,11 @@ Run JDTLS itself on Java 21, without changing the project's own JDK."
   :commands sbt-start sbt-command
   :config
   (setq sbt:program-options '("-Dsbt.supershell=false")))
+
+;; Opt-in Metals v2: overrides the `scala-mode' entry registered above.
+;; When `my-use-metals-v2' is nil (default) the v1 setup is untouched.
+(when my-use-metals-v2
+  (require 'lang-metals-v2))
 
 ;; --- Rust ---
 (use-package rustic
@@ -189,6 +201,10 @@ Run JDTLS itself on Java 21, without changing the project's own JDK."
 (use-package cider
   :ensure t
   :defer t)
+
+;; ANTLR4
+(setq auto-mode-alist (cons '("\\.g\\'" . antlr-mode) auto-mode-alist))
+(setq auto-mode-alist (cons '("\\.g4\\'" . antlr-mode) auto-mode-alist))
 
 (provide 'lang-prog)
 ;;; lang-prog.el ends here

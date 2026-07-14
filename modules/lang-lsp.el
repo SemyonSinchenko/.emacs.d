@@ -59,8 +59,6 @@
   :ensure t
   :config
   (setf (alist-get 'python-mode apheleia-mode-alist) '(ruff))
-  ;; РАЗРЕШАЕМ: apheleia-mode-alist можно менять через dir-locals,
-  ;; если значение — это список (listp)
   (put 'apheleia-mode-alist 'safe-local-variable #'listp))
 
 (provide 'lang-lsp)
