@@ -33,11 +33,13 @@
 
 ;; 2. [cite_start]Тема оформления [cite: 5]
 ;; Используем use-package вместо ручной проверки package-installed-p
-(use-package gruvbox-theme
+(use-package catppuccin-theme
   :ensure t
   :config
-  ;; t в конце отключает запрос подтверждения "Do you trust this theme?"
-  (load-theme 'gruvbox-dark-medium t))
+  ;; Flavors: latte, frappe, macchiato, mocha
+  (setq catppuccin-flavor 'frappe)
+  ;; :no-confirm отключает запрос "Do you trust this theme?"
+  (load-theme 'catppuccin :no-confirm))
 
 (provide 'core-ui)
 ;;; core-ui.el ends here

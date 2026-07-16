@@ -39,5 +39,11 @@
   :defer t     ; Не загружать сразу (ленивая загрузка)
   :bind ("C-x x f" . apheleia-format-buffer))
 
+;; 6. C-d: удалить выделение, иначе символ вперед
+;; По умолчанию C-d вызывает `delete-char', который игнорирует выделение.
+;; Привязываем к `delete-forward-char' (как клавиша <delete>):
+;; если есть активный region — удаляет выделение, иначе — символ вперед.
+(keymap-global-set "C-d" #'delete-forward-char)
+
 (provide 'core-keys)
 ;;; core-keys.el ends here

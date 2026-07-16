@@ -39,6 +39,12 @@
 (global-display-line-numbers-mode 1)
 (setq auto-revert-verbose nil)
 
+;; C-d: удалить выделение, иначе символ вперед.
+;; По умолчанию C-d вызывает `delete-char' и игнорирует region.
+;; `delete-forward-char' ведёт себя как <delete>: с активным region
+;; удаляет выделение, иначе — символ в позиции курсора.
+(global-set-key (kbd "C-d") #'delete-forward-char)
+
 (require 'server)
 
 ;; Keep backup/auto-save minimal and local.
@@ -92,9 +98,11 @@
          ("M-r" . consult-history)))
 
 ;; Theme from main config.
-(use-package gruvbox-theme
+(use-package catppuccin-theme
   :config
-  (load-theme 'gruvbox-dark-medium t))
+  ;; Flavors: latte, frappe, macchiato, mocha
+  (setq catppuccin-flavor 'frappe)
+  (load-theme 'catppuccin :no-confirm))
 
 ;; Optional key habit from main config.
 (use-package ace-window
