@@ -166,6 +166,24 @@
              my-minimal-rainbow-csv-size-limit)
       (rainbow-csv-mode 1))))
 
+;; Merge conflict resolution (git merge/rebase).
+;; Built-in `smerge-mode'; its command prefix is C-c ^
+;; (smerge-next, smerge-prev, smerge-keep-current, smerge-keep-mine, ...).
+(use-package smerge-mode
+  :ensure nil
+  :defer t
+  :custom
+  (smerge-command-prefix (kbd "C-c ^"))
+  :init
+  (defun my-minimal-smerge-maybe-enable ()
+    "Turn on `smerge-mode' when conflict markers are detected."
+    (save-excursion
+      (goto-char (point-min))
+      (when (re-search-forward "^<<<<<<< " nil t)
+        (smerge-mode 1))))
+  (add-hook 'find-file-hook #'my-minimal-smerge-maybe-enable)
+  (add-hook 'after-revert-hook #'my-minimal-smerge-maybe-enable))
+
 ;; Clipboard integration with GNOME.
 ;; XDG_RUNTIME_DIR is already present in the daemon; wl-clipboard needs only WAYLAND_DISPLAY on top of it.
 (setenv "WAYLAND_DISPLAY" (or (getenv "WAYLAND_DISPLAY") "wayland-0"))
