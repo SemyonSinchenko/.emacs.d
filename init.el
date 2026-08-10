@@ -40,6 +40,7 @@
 (require 'tools-dired)     ;; Git, Projectile, Terminal
 (require 'tools-ai)        ;; Your AI config
 (require 'tools-org)       ;; Org mode and notes
+(require 'tools-lexicon)   ;; Lexicon CLI org transforms
 
 ;; Languages and IDE features
 (require 'lang-lsp)        ;; LSP (Eglot) and linters
