@@ -6,6 +6,16 @@
 
 ;;; Code:
 
+;;; Compatibility: `set-local' is used by recent MELPA builds of
+;;; vertico, corfu, magit, etc., but only exists in Emacs 31+.
+;;; Provide it for Emacs 30 and earlier so the minibuffer doesn't
+;;; break with "Symbol's function definition is void: set-local".
+(unless (fboundp 'set-local)
+  (defun set-local (symbol value)
+    "Make SYMBOL buffer-local and set its value to VALUE.
+This is equivalent to (set (make-local-variable SYMBOL) VALUE)."
+    (set (make-local-variable symbol) value)))
+
 ;;; Disable TRAMP-GVFS
 (setq tramp-archive-enabled nil)
 (defalias 'tramp-archive-file-name-p #'ignore)
