@@ -39,6 +39,15 @@
 (global-display-line-numbers-mode 1)
 (setq auto-revert-verbose nil)
 
+;; JSON/JS: indent with 2 spaces (`.json' opens in `js-json-mode', which
+;; uses `js-indent-level' 4 and tabs by default).  Most JSON in the wild
+;; uses 2 spaces.  The ts-mode offsets already default to 2, set explicitly
+;; for consistency.
+(setq js-indent-level 2
+      json-ts-mode-indent-offset 2
+      typescript-ts-mode-indent-offset 2)
+(setq-default indent-tabs-mode nil)
+
 ;; C-d: удалить выделение, иначе символ вперед.
 ;; По умолчанию C-d вызывает `delete-char' и игнорирует region.
 ;; `delete-forward-char' ведёт себя как <delete>: с активным region

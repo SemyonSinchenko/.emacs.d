@@ -61,5 +61,18 @@
   (setf (alist-get 'python-mode apheleia-mode-alist) '(ruff))
   (put 'apheleia-mode-alist 'safe-local-variable #'listp))
 
+;; 5. JSON / JS / TS: отступы 2 пробела (не 4 и не табы)
+;; По умолчанию `.json' открывается в `js-json-mode' (json-ts-mode — только
+;; при установленной tree-sitter грамматике), а он наследует `js-indent-level'
+;; = 4 и `indent-tabs-mode' = t, отсюда 4 пробела (или таб при tab-width 4).
+;; Большинство JSON-файлов использует 2 пробела.  ts-режимы (json-ts-mode,
+;; typescript-ts-mode) по умолчанию уже дают 2, но задаём явно для надёжности.
+;; Apheleia читает те же переменные при построении аргументов prettier
+;; (`apheleia-formatters-indent'), поэтому этого достаточно и для C-x x f.
+(setq js-indent-level 2
+      json-ts-mode-indent-offset 2
+      typescript-ts-mode-indent-offset 2)
+(setq-default indent-tabs-mode nil)
+
 (provide 'lang-lsp)
 ;;; lang-lsp.el ends here
