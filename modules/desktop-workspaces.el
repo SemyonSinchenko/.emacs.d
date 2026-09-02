@@ -78,6 +78,16 @@ with the current one highlighted (and clickable)."
         (apply #'concat (persp-mode-line)))
     (error nil)))
 
+(defun my-tab-bar-refresh ()
+  "Force the top status strip to re-render its segments.
+The tab bar re-evaluates its format functions only after a
+GLOBAL mode-line invalidation (`force-mode-line-update' with a
+non-nil argument).  A workspace switch marks only mode lines
+dirty, so the workspaces highlight used to stay on the previous
+workspace until some periodic timer refreshed the strip (for
+example listen's status timer while music is playing)."
+  (force-mode-line-update 'all))
+
 (setq tab-bar-format
       '(my-tab-bar-workspaces
         my-tab-bar-now-playing
@@ -125,7 +135,17 @@ with the current one highlighted (and clickable)."
   (setq switch-to-prev-buffer-skip
         (lambda (_win buff _bury-or-kill)
           (and (bound-and-true-p persp-mode)
-               (not (persp-is-current-buffer buff))))))
+               (not (persp-is-current-buffer buff)))))
+  ;; The tab bar needs a global mode-line invalidation to re-render
+  ;; its segments; a plain switch marks only mode lines dirty (see
+  ;; `my-tab-bar-refresh').  Activation covers switch/create/cycle,
+  ;; the 1..9/0 keys, tab-bar clicks, and the automatic switch after
+  ;; killing the current workspace; the other two hooks cover
+  ;; renaming and killing another workspace.
+  (dolist (hook '(persp-activated-hook
+                  persp-killed-hook
+                  persp-after-rename-hook))
+    (add-hook hook #'my-tab-bar-refresh)))
 
 ;; ------------------------------------------------------------------
 ;; Sidebar: treemacs, one scoped tree per workspace

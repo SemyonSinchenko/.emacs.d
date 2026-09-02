@@ -41,7 +41,7 @@
      (lambda (proc _event)
        (message "[desktop] rclone %s: %s"
                 (process-name proc)
-                (string-trim (or (process-status proc) "")))))))
+                (symbol-name (process-status proc)))))))
 
 (defun my-sync-run (name)
   "Run sync job NAME (see `my-desktop-sync-jobs')."
