@@ -63,3 +63,14 @@ elfeed/
 #
 .qwen
 eca*
+# --- Emacs Desktop ---
+desktop-config-local.el
+desktop-session.eld
+ai-memory.org
+ai-attachments/
+ai-sessions/
+telega/
+
+# logins / tokens / history
+hackernews
+lem.plstore
