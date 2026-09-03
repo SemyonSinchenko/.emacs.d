@@ -194,6 +194,7 @@
              (desktop-torrent . my-desktop-enable-torrent)
              (desktop-comms . my-desktop-enable-telega)
              (desktop-ai . my-desktop-enable-ai)
+             (desktop-roguelike . my-desktop-enable-roguelike)
              desktop-keys))
   (if (consp m)
       (my-desktop--load-module (car m) (cdr m))

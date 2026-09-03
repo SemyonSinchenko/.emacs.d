@@ -511,5 +511,189 @@ continue reading a previously fetched page"))
   (gptel (format "*%s*" (gptel-backend-name gptel-backend))
          nil nil t))
 
+;; ------------------------------------------------------------------
+;; Z-AI coding plan usage dashboard (C-c a z)
+;; ------------------------------------------------------------------
+;; https://api.z.ai/api/monitor/usage/quota/limit ->
+;;   limits: (type "TOKENS_LIMIT" unit 3 number 5) = 5-hour window,
+;;           (type "TOKENS_LIMIT" unit 6 number 1) = weekly window;
+;;   nextResetTime is epoch-milliseconds, so countdowns are exact in
+;;   any timezone.
+;; https://api.z.ai/api/monitor/usage/model-usage?startTime=... ->
+;;   hourly buckets whose labels live in the SERVER's frame (UTC+8)
+;;   and whose tail is clamped at server "now", regardless of the
+;;   timestamps sent.  So: ask for a generous span and keep only the
+;;   trailing 24 hourly buckets, comparing label differences.  No
+;;   absolute wall-clock times are ever displayed.
+
+(defun my-ai-zai--request (path)
+  "GET PATH from the Z-AI monitor API; return its `data' object."
+  (let* ((key (or (getenv my-desktop-ai-zai-api-key-env)
+                  (user-error "Env var %s is not set (Z-AI API key)"
+                              my-desktop-ai-zai-api-key-env)))
+         (url-request-extra-headers
+          `(("Authorization" . ,(concat "Bearer " key))))
+         (resp (my-ai--http-body
+                (concat my-desktop-ai-zai-api-url path))))
+    (unless resp
+      (user-error "Z-AI usage: request failed (no response)"))
+    (unless (= (car resp) 200)
+      (user-error "Z-AI usage: HTTP %d" (car resp)))
+    (let* ((json (json-parse-string (cdr resp)
+                                    :object-type 'alist
+                                    :array-type 'list))
+           (code (alist-get 'code json)))
+      (unless (equal code 200)
+        (user-error "Z-AI usage: API error %s (%s)"
+                    code (or (alist-get 'msg json) "?")))
+      (alist-get 'data json))))
+
+(defun my-ai-zai--tokens-limit (limits unit number)
+  "Return the TOKENS_LIMIT entry with UNIT and NUMBER from LIMITS."
+  (seq-find (lambda (limit)
+              (and (string= (alist-get 'type limit) "TOKENS_LIMIT")
+                   (equal (alist-get 'unit limit) unit)
+                   (equal (alist-get 'number limit) number)))
+            limits))
+
+(defun my-ai-zai--bar (pct)
+  "Return a 10-slot filled bar for PCT (0..100)."
+  (let* ((pct (min 100 (max 0 (round (or pct 0)))))
+         (filled (round (/ pct 10.0))))
+    (concat (make-string filled ?\u2588)
+            (make-string (- 10 filled) ?\u2591))))
+
+(defun my-ai-zai--human-tokens (n)
+  "Format token count N compactly (K/M/B)."
+  (cond ((>= n 1.0e9) (format "%.1fB" (/ n 1.0e9)))
+        ((>= n 1.0e6) (format "%.1fM" (/ n 1.0e6)))
+        ((>= n 1.0e3) (format "%.1fK" (/ n 1.0e3)))
+        (t (format "%d" n))))
+
+(defun my-ai-zai--reset-in (ms)
+  "Humanize epoch-milliseconds MS into a reset countdown.
+Deltas between now and MS are timezone-independent."
+  (let* ((secs (max 0 (floor (- (/ ms 1000.0) (float-time)))))
+         (days (/ secs 86400))
+         (hours (% (/ secs 3600) 24))
+         (mins (% (/ secs 60) 60)))
+    (if (>= days 1)
+        (format "%dd %dh" days hours)
+      (format "%dh %02dm" hours mins))))
+
+(defun my-ai-zai--quota-line (label entry)
+  "Format one quota row: LABEL, bar, percent and reset countdown."
+  (if (not entry)
+      (format "%-4s  (not reported)" label)
+    (format "%-4s  %s %3d%%  resets in %s"
+            label
+            (my-ai-zai--bar (alist-get 'percentage entry))
+            (round (or (alist-get 'percentage entry) 0))
+            (my-ai-zai--reset-in
+             (or (alist-get 'nextResetTime entry) 0)))))
+
+(defun my-ai-zai--label-time (label)
+  "Parse an x_time LABEL (like 2026-09-03 19:00) to a time value.
+The label frame is unknown (server-local), so it is decoded as
+UTC; only differences between labels are ever used."
+  (let ((parts (split-string label "[-: ]" t)))
+    (encode-time 0
+                 (string-to-number (nth 4 parts))
+                 (string-to-number (nth 3 parts))
+                 (string-to-number (nth 2 parts))
+                 (string-to-number (nth 1 parts))
+                 (string-to-number (nth 0 parts))
+                 t)))
+
+(defun my-ai-zai--last-24h ()
+  "Fetch usage for the trailing 24 hours (24 hourly buckets).
+Return (TOKENS CALLS MODEL-PAIRS); MODEL-PAIRS is an alist
+((MODEL-NAME . TOKENS-IN-24H) ...)."
+  (let* ((stamp (lambda (time)
+                  (replace-regexp-in-string
+                   " " "%20"
+                   (format-time-string "%Y-%m-%d %H:%M:%S" time t))))
+         (query (concat
+                 "?startTime="
+                 (funcall stamp (time-subtract (current-time)
+                                               (seconds-to-time
+                                                (* 36 3600))))
+                 "&endTime="
+                 (funcall stamp (time-add (current-time)
+                                          (seconds-to-time
+                                           (* 12 3600))))))
+         (data (my-ai-zai--request
+                (concat "/api/monitor/usage/model-usage" query)))
+         (labels (append (alist-get 'x_time data) nil))
+         (calls-arr (append (alist-get 'modelCallCount data) nil))
+         (tokens-arr (append (alist-get 'tokensUsage data) nil))
+         (last (and labels (my-ai-zai--label-time (car (last labels)))))
+         ;; keep 24 buckets ending at the newest one (inclusive)
+         (cutoff (and last (time-subtract last
+                                          (seconds-to-time
+                                           (* 23 3600)))))
+         (keep (when cutoff
+                 (seq-filter
+                  (lambda (idx)
+                    (not (time-less-p
+                          (my-ai-zai--label-time (nth idx labels))
+                          cutoff)))
+                  (number-sequence 0 (1- (length labels))))))
+         (pick (lambda (arr)
+                 (mapcar (lambda (idx) (or (nth idx arr) 0)) keep)))
+         (models (mapcar
+                  (lambda (model)
+                    (cons (alist-get 'modelName model)
+                          (apply #'+ (funcall pick
+                                              (append (alist-get
+                                                       'tokensUsage
+                                                       model)
+                                                      nil)))))
+                  (append (alist-get 'modelDataList data) nil))))
+    (list (apply #'+ (funcall pick tokens-arr))
+          (apply #'+ (funcall pick calls-arr))
+          models)))
+
+(defun my-ai-zai--model-names (models)
+  "Return up to 3 MODEL-PAIRS as \"name (tokens)\", largest first."
+  (mapconcat
+   (lambda (model)
+     (format "%s (%s)" (car model)
+             (my-ai-zai--human-tokens (cdr model))))
+   (seq-take (seq-sort (lambda (a b) (> (cdr a) (cdr b))) models)
+             3)
+   ", "))
+
+(defun my-ai-zai-usage--dashboard ()
+  "Build the Z-AI coding-plan usage dashboard text."
+  (let* ((quota (my-ai-zai--request
+                 "/api/monitor/usage/quota/limit"))
+         (level (alist-get 'level quota))
+         (limits (alist-get 'limits quota))
+         (hourly (my-ai-zai--last-24h)))
+    (string-join
+     (delq nil
+           (list
+            (concat "Z-AI coding plan"
+                    (if level (format " (%s)" level) ""))
+            (my-ai-zai--quota-line
+             "5h" (my-ai-zai--tokens-limit limits 3 5))
+            (my-ai-zai--quota-line
+             "week" (my-ai-zai--tokens-limit limits 6 1))
+            (format "24h  %s tokens, %d calls%s"
+                    (my-ai-zai--human-tokens (nth 0 hourly))
+                    (nth 1 hourly)
+                    (if (nth 2 hourly)
+                        (concat "  "
+                                (my-ai-zai--model-names
+                                 (nth 2 hourly)))
+                      ""))))
+     "\n")))
+
+(defun my-ai-zai-usage ()
+  "Show Z-AI coding-plan usage in the minibuffer."
+  (interactive)
+  (message "%s" (my-ai-zai-usage--dashboard)))
+
 (provide 'desktop-ai)
 ;;; desktop-ai.el ends here

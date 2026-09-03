@@ -474,6 +474,74 @@ tool result states the offset to continue from."
   :type 'integer
   :group 'my-desktop)
 
+(defcustom my-desktop-ai-zai-api-url "https://api.z.ai"
+  "Base URL of the Z-AI monitor API used by the usage dashboard
+(`my-ai-zai-usage', C-c a z)."
+  :type 'string
+  :group 'my-desktop)
+
+(defcustom my-desktop-ai-zai-api-key-env "ZAI_API_KEY"
+  "Environment variable that holds the Z-AI coding-plan API key."
+  :type 'string
+  :group 'my-desktop)
+
+;; ------------------------------------------------------------------
+;; Roguelike copilot (NetHack etc.)
+;; ------------------------------------------------------------------
+
+(defcustom my-desktop-enable-roguelike t
+  "Load the roguelike copilot (ghostel game + gptel advisor)."
+  :type 'boolean
+  :group 'my-desktop)
+
+(defcustom my-desktop-roguelike-games
+  '(("NetHack" . (:command "nethack")))
+  "Games the roguelike copilot can launch.
+Each entry is (NAME . PLIST):
+  :command shell command typed into the terminal to start the game
+  :dir      optional working directory for the terminal
+  :profile  optional copilot profile key (defaults to lowercased
+            NAME; profiles are defined in desktop-roguelike.el)
+
+Examples:
+  ((\"NetHack\" . (:command \"nethack\"))
+   (\"Angband\" . (:command \"angband\" :dir \"~/angband\")))"
+  :type '(alist :key-type string :value-type plist)
+  :group 'my-desktop)
+
+(defcustom my-desktop-roguelike-default-game nil
+  "Default game name for `my-roguelike-start' (nil = prompt)."
+  :type '(choice string (const nil))
+  :group 'my-desktop)
+
+(defcustom my-desktop-roguelike-log-dir
+  (expand-file-name "roguelike" user-emacs-directory)
+  "Directory holding roguelike copilot session data (message log,
+compaction chunks, state card, stories).  Git-ignored state."
+  :type 'directory
+  :group 'my-desktop)
+
+(defcustom my-desktop-roguelike-log-chunk-size 100
+  "Compact the message log every this many new lines."
+  :type 'natnum
+  :group 'my-desktop)
+
+(defcustom my-desktop-roguelike-recent-lines 100
+  "Raw log lines injected as recent context into advisor questions."
+  :type 'natnum
+  :group 'my-desktop)
+
+(defcustom my-desktop-roguelike-summary-count 4
+  "How many recent compaction summaries to inject into context."
+  :type 'natnum
+  :group 'my-desktop)
+
+(defcustom my-desktop-roguelike-model nil
+  "gptel model (a symbol) used for advisor and compaction
+requests.  Nil = the default model of the desktop AI backend."
+  :type '(choice symbol (const nil))
+  :group 'my-desktop)
+
 ;; ------------------------------------------------------------------
 ;; 10. Home tab widgets
 ;; ------------------------------------------------------------------

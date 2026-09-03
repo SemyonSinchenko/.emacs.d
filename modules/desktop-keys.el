@@ -25,6 +25,11 @@
 (defvar my-ai-map (make-sparse-keymap)
   "Nested keymap of AI commands, bound to C-c a.")
 
+;; Roguelike copilot: Super-prefixed commands, active only in game
+;; terminal buffers.  The keymap itself is defined by
+;; desktop-roguelike.el, which loads before this file.
+(defvar my-roguelike-keymap)
+
 (defconst my-desktop--default-keys
   '((global ("C-x b" . persp-switch-to-buffer*) ; buffers of this workspace
             ("C-x k" . persp-kill-buffer*)      ; kill within workspace
@@ -39,12 +44,20 @@
             ("l" . my-lem)
             ("r" . my-reddit)
             ("t" . my-telega))
+    (roguelike ("s-d" . my-roguelike-describe-state)
+               ("s-o" . my-roguelike-describe-object)
+               ("s-a" . my-roguelike-advise)
+               ("s-q" . my-roguelike-ask)
+               ("s-h" . my-roguelike-explain-last)
+               ("s-t" . my-roguelike-story)
+               ("s-c" . my-roguelike-chat))
     (ai ("a" . my-ai-chat)            ; open a new chat
         ("r" . my-ai-session-rename)  ; rename session file
         ("o" . my-ai-session-open)    ; resume by name
         ("g" . gptel-menu)            ; gptel settings menu
         ("l" . my-ai-session-search)  ; search sessions
-        ("s" . my-ai-session-save)))) ; save session now
+        ("s" . my-ai-session-save)    ; save session now
+        ("z" . my-ai-zai-usage))))    ; Z-AI coding plan usage
 
 (defun my-keys--bind (map key command)
   "Bind KEY to COMMAND in MAP, warning about problems."
@@ -74,6 +87,9 @@
     ('ai
      (dolist (b binds)
        (my-keys--bind my-ai-map (car b) (cdr b))))
+    ('roguelike
+     (dolist (b binds)
+       (my-keys--bind my-roguelike-keymap (car b) (cdr b))))
     (_ (my-desktop--warn "unknown keybinding context %S" context))))
 
 (defun my-keys-apply ()
@@ -111,6 +127,8 @@
      :if (lambda () (fboundp 'my-term-new)))
     ("a" "AI chat" my-ai-chat
      :if (lambda () (fboundp 'my-ai-chat)))
+    ("z" "Z-AI usage" my-ai-zai-usage
+     :if (lambda () (fboundp 'my-ai-zai-usage)))
     ("m" "Music library" my-media-music-library
      :if (lambda () (fboundp 'my-media-music-library)))
     ("e" "Elfeed" my-rss-open

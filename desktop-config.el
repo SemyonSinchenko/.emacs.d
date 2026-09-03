@@ -154,6 +154,22 @@
 (setq my-desktop-ai-search 'searxng)
 (setq my-desktop-ai-searxng-url "http://localhost:7331/search")
 
+;; Z-AI coding plan usage dashboard (C-c a z); key comes from the
+;; environment variable named below:
+(setq my-desktop-ai-zai-api-url "https://api.z.ai")
+(setq my-desktop-ai-zai-api-key-env "ZAI_API_KEY")
+
+;; ------------------------------------------------------------------
+;; 9b. Roguelike copilot
+;; ------------------------------------------------------------------
+
+(setq my-desktop-roguelike-games
+      '(("NetHack" . (:command "nethack"))
+        ;; ("Angband" . (:command "angband"))
+        ))
+;; (setq my-desktop-roguelike-default-game "NetHack")
+;; (setq my-desktop-roguelike-model 'deepseek-v4-flash)
+
 ;; ------------------------------------------------------------------
 ;; 10. Home tab
 ;; ------------------------------------------------------------------

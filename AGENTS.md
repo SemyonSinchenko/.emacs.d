@@ -37,6 +37,7 @@ configurations**:
 │   ├── desktop-fm.el        # Dired / dirvish file management
 │   ├── desktop-org.el       # Org + org-roam (Desktop daemon owns the roam DB)
 │   ├── desktop-reader.el    # EPUB/CBZ/... reading + reading log
+│   ├── desktop-roguelike.el # Roguelike copilot: ghostel game + gptel advisor
 │   ├── desktop-media.el     # listen.el (mpv) music
 │   ├── desktop-rss.el       # elfeed + elfeed-org
 │   ├── desktop-social.el    # Lemmy, Bluesky, Hacker News, Reddit
@@ -184,10 +185,13 @@ Always include `lexical-binding: t` at the top of every file.
     buffer overview); `C-x b` / `C-x k` are workspace-scoped.
   - `C-c s` - social prefix (b bluesky, h hackernews, l lemmy, r reddit,
     t telegram); `C-c a` - AI prefix (a chat, o open session, l search,
-    g gptel-menu, ...).
+    g gptel-menu, z Z-AI usage, ...).
   - Top level: ``C-c ` `` (treemacs sidebar), `C-c m` (sync menu),
     `C-c t` / `C-c T` (terminal), `C-c p` (music play/pause),
     `C-c M-w` (copy image at point).
+  - `s-*` - roguelike copilot (Super prefix, bound in
+    `my-roguelike-keymap`, active only in game terminal buffers via
+    `my-roguelike-mode`; see modules/desktop-roguelike.el).
   - The root transient `my-desktop-menu` has no key binding; run it
     with `M-x my-desktop-menu`.
 
