@@ -275,6 +275,18 @@ handle, password = an app password."
   :type 'boolean
   :group 'my-desktop)
 
+(defcustom my-desktop-dired-hide-dotfiles t
+  "Hide dotfiles in Dired buffers by default.
+Toggle visibility in a Dired buffer with M-x `my-dired-toggle-hidden'."
+  :type 'boolean
+  :group 'my-desktop)
+
+(defcustom my-desktop-dired-omit-files "^\\."
+  "Regexp of file names Dired hides when `my-desktop-dired-hide-dotfiles' is on.
+By default every name starting with a dot (dotfiles) is hidden."
+  :type 'regexp
+  :group 'my-desktop)
+
 (defcustom my-desktop-enable-popper t
   "Load popper (toggleable popup windows)."
   :type 'boolean

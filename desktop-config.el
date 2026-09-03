@@ -82,6 +82,8 @@
 (setq my-desktop-enable-rss t)
 (setq my-desktop-enable-elfeed-tube t)
 (setq my-desktop-enable-dirvish t)
+;; Dired starts with dotfiles hidden; M-x my-dired-toggle-hidden shows them:
+(setq my-desktop-dired-hide-dotfiles t)
 (setq my-desktop-enable-popper t)
 (setq my-desktop-enable-org-roam t)
 (setq my-desktop-enable-org-modern t)

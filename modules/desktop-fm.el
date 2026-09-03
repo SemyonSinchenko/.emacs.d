@@ -16,6 +16,26 @@
   (dired-recursive-copies 'always)
   (dired-recursive-deletes 'always))
 
+;; Hidden (dot) files: hidden by default, M-x `my-dired-toggle-hidden'
+;; flips visibility in the current Dired buffer.
+(require 'dired-x)                      ; provides `dired-omit-mode'
+(setq dired-omit-files my-desktop-dired-omit-files)
+(add-hook 'dired-mode-hook
+          (lambda ()
+            (when my-desktop-dired-hide-dotfiles
+              (dired-omit-mode 1))))
+
+(defun my-dired-toggle-hidden ()
+  "Toggle visibility of hidden (dot) files in the current Dired buffer.
+Uses `dired-omit-mode' with `my-desktop-dired-omit-files', so only
+names matching that regexp (dotfiles by default) appear and disappear."
+  (interactive)
+  (unless (derived-mode-p 'dired-mode)
+    (user-error "Not in a Dired buffer"))
+  (dired-omit-mode (if dired-omit-mode -1 1))
+  (message "Hidden files: %s"
+           (if dired-omit-mode "hidden" "shown")))
+
 (use-package dired-gitignore
   :ensure t
   :after dired
