@@ -27,8 +27,9 @@
 ;;   s-t story: turn the raw log into a chronicle (works after death)
 ;;   s-c focus the chat buffer
 ;;
-;; The read_screen tool lets any gptel conversation look at the
-;; current screen + recent messages on demand.
+;; The read_screen tool is offered only to the copilot: the session
+;; chat buffer and one-shot advisor questions add it to gptel's
+;; tools; regular gptel chats never see it.
 ;;
 ;; Files live under `my-desktop-roguelike-log-dir' (git-ignored):
 ;;   <session>/game.log        raw T<turn>: message lines
@@ -182,8 +183,11 @@ Keys: :game :profile :dir :log :card :buffer :chat :command
 :lines :compacted :chunks :compacting :last-compact :last-msg
 :over :over-captures :hp-ring.")
 
-(defvar my-roguelike--tool-registered nil
-  "Ensure the read_screen tool is registered only once.")
+(defvar my-roguelike--read-screen-tool nil
+  "The read_screen gptel tool, created once when gptel loads.
+Only copilot contexts (the session chat buffer and one-shot
+advisor requests) add it to `gptel-tools'; it never enters the
+global default tool list, so regular gptel chats don't see it.")
 
 (defun my-roguelike--session-or-error ()
   "Return the current session plist or error out."
@@ -545,7 +549,8 @@ disabled by default for mechanical requests (compaction, story)."
     (user-error "No gptel backend; check the desktop AI settings"))
   (let ((gptel-model (or my-desktop-roguelike-model gptel-model))
         (gptel-use-tools (and tools t))
-        (gptel-tools (and tools gptel-tools)))
+        (gptel-tools (and tools
+                          (my-roguelike--tools-with-read-screen))))
     (condition-case err
         (gptel-request prompt
           :system system
@@ -591,28 +596,33 @@ screen."
                 (plist-get snap :lines) (plist-get snap :cursor)))))))
 
 (defun my-roguelike--register-tool ()
-  "Add the read_screen tool to `gptel-tools' (once)."
-  (unless my-roguelike--tool-registered
-    (when (and (boundp 'gptel-tools) (fboundp 'gptel-make-tool))
-      (setq my-roguelike--tool-registered t)
-      (setq gptel-tools
-            (append gptel-tools
-                    (list
-                     (gptel-make-tool
-                      :function #'my-roguelike--tool-read-screen
-                      :name "read_screen"
-                      :description
-                      "Read the current screen of the user's NetHack \
+  "Create the copilot's read_screen tool (once, after gptel loads).
+The tool is kept out of the global `gptel-tools': copilot contexts
+add it locally, so regular gptel chats never see it."
+  (unless my-roguelike--read-screen-tool
+    (when (fboundp 'gptel-make-tool)
+      (setq my-roguelike--read-screen-tool
+            (gptel-make-tool
+             :function #'my-roguelike--tool-read-screen
+             :name "read_screen"
+             :description
+             "Read the current screen of the user's NetHack \
 roguelike session: status digest, the ASCII map, and the last \
 messages the game displayed.  Use it to see what the player sees \
 right now."
-                      :args (list '(:name "messages"
-                                          :type integer
-                                          :optional t
-                                          :description
-                                          "how many recent log lines \
+             :args (list '(:name "messages"
+                                 :type integer
+                                 :optional t
+                                 :description
+                                 "how many recent log lines \
 to include (default 40)"))
-                      :category "roguelike")))))))
+             :category "roguelike")))))
+
+(defun my-roguelike--tools-with-read-screen ()
+  "Default gptel tools plus the copilot's read_screen tool."
+  (append (default-value 'gptel-tools)
+          (when my-roguelike--read-screen-tool
+            (list my-roguelike--read-screen-tool))))
 
 (defun my-roguelike--tool-read-screen (&optional messages)
   "read_screen tool body: context for the live session."
@@ -625,8 +635,9 @@ to include (default 40)"))
             (substring ctx 0 16000)
           ctx)))))
 
-;; Register whenever gptel loads (after desktop-ai has built its
-;; tool list), or right away if it is already loaded.
+;; Create the read_screen tool whenever gptel loads (after
+;; desktop-ai has built its tool list), or right away if gptel is
+;; already loaded.  It is NOT added to `gptel-tools' globally.
 (with-eval-after-load 'gptel (my-roguelike--register-tool))
 (when (featurep 'gptel) (my-roguelike--register-tool))
 
@@ -841,6 +852,10 @@ M-x my-roguelike-story to retry" (1+ idx))
         (gptel-mode 1))
       (setq-local gptel--system-message
                   (or (plist-get profile :directive) ""))
+      ;; This buffer is the only gptel chat that gets the copilot's
+      ;; read_screen tool; regular chats keep gptel's default tools.
+      (setq-local gptel-tools
+                  (my-roguelike--tools-with-read-screen))
       (when (= (buffer-size) 0)
         (insert (format "* %s copilot -- %s\n\n"
                         game (format-time-string "%Y-%m-%d %H:%M"))))

@@ -90,6 +90,21 @@ NCRs, which librsvg cannot handle)."
       (setq telega-proxies (append my-desktop-telega-proxies nil)))
     :config
     (setq telega-use-images t)
+    ;; Videos: telega's default player is ffplay whenever ffmpeg is
+    ;; installed, and ffplay garbles the picture for some codecs
+    ;; (sound stays fine).  Use `my-desktop-video-player' instead; for
+    ;; mpv-compatible commands keep telega's own default extras:
+    ;; resume position (`telega-ffplay-media-timestamp') and
+    ;; incremental playback of still-downloading files.
+    (when my-desktop-video-player
+      (setq telega-video-player-command
+            (if (string-prefix-p "mpv" my-desktop-video-player)
+                `(concat ,my-desktop-video-player
+                         (when telega-ffplay-media-timestamp
+                           (format " --start=%f" telega-ffplay-media-timestamp))
+                         (when telega-video-play-incrementally
+                           " --cache=no"))
+              my-desktop-video-player)))
     ;; Resolve the emoji font explicitly: color fonts first, then
     ;; monochrome fallbacks (Symbola per the telega FAQ).
     (setq telega-emoji-font-family

@@ -45,6 +45,7 @@ from the local lexicon-org checkout (see
             ("C-c T" . my-term-project)
             ("C-c p" . my-media-toggle)
             ("C-c M-w" . my-clipboard-copy-image)) ; copy image at point
+    (dired ("RET" . my-dired-find-file)) ; videos play in the external player
     (social ("b" . my-bluesky)
             ("h" . my-hackernews)
             ("l" . my-lem)

@@ -44,6 +44,9 @@
 ;; template into it, which errors while rendered from the tab bar.
 ;; No tabs are ever displayed: `tab-bar-format' contains no tab
 ;; entries, which keeps perspective's tab-bar caveat moot.
+;; The workspaces widget never wraps the strip to a second line:
+;; it gets every free column left of the clock, and only then are
+;; workspace names shortened (current one last).
 
 (defun my-tab-bar-now-playing ()
   "Tab-bar segment: what listen.el is playing, or nothing.
@@ -69,13 +72,98 @@ running) and never lets errors reach redisplay."
                     battery-mode-line-string)))
     (error nil)))
 
+(defconst my-tab-bar--ws-ellipsis "…"
+  "Ellipsis shown when a workspace name does not fit the top strip.")
+
+(defconst my-tab-bar--ws-min-name-width 2
+  "Columns kept for a workspace name when the strip runs out of room.")
+
+(declare-function persp-current-name "perspective")
+(declare-function persp-format-name "perspective")
+(declare-function persp-names "perspective")
+;; Defined in perspective.el, loaded by `use-package' below.
+(defvar persp-modestring-dividers)
+(defvar persp-modestring-short)
+
+(defun my-tab-bar--free-columns ()
+  "Columns the workspaces widget may occupy in the top strip.
+Frame width minus the right-aligned clock and the now-playing
+segment, with a small safety margin for face/pixel rounding."
+  (max 10
+       (- (frame-width)
+          (string-width (or (my-tab-bar-now-playing) ""))
+          (string-width (or (my-tab-bar-clock) ""))
+          2)))
+
+(defun my-tab-bar--ws-clip (name width)
+  "Render workspace NAME for the top strip, clipped to WIDTH columns.
+Reuses perspective's own formatting, so faces and click bindings
+survive; `truncate-string-to-width' keeps text properties."
+  (let ((s (persp-format-name name)))
+    (if (and width (< width (string-width s)))
+        (truncate-string-to-width s width nil nil my-tab-bar--ws-ellipsis)
+      s)))
+
+(defun my-tab-bar--ws-plan (names current budget)
+  "Plan (NAME . width) pairs fitting workspace NAMES into BUDGET columns.
+CURRENT keeps room for its full name first; the other workspaces
+share what is left, and `my-desktop-tab-workspaces-name-width'
+caps every name when it is set.  Widths are upper limits: names
+shorter than their allowance pass through untouched."
+  (let* ((cap my-desktop-tab-workspaces-name-width)
+         (cap-w (or cap most-positive-fixnum))
+         (min-w my-tab-bar--ws-min-name-width)
+         (sep-w (string-width (nth 2 persp-modestring-dividers)))
+         (chrome (+ 2                      ; opening and closing bracket
+                    (* sep-w (1- (length names)))))
+         (full (mapcar (lambda (n) (min cap-w
+                                        (string-width (format "%s" n))))
+                       names))
+         (total (+ chrome (apply #'+ full))))
+    (if (<= total budget)
+        ;; Everything fits: keep every (capped) name whole.
+        (seq-mapn #'cons names full)
+      ;; Not enough room: the current workspace wins its full width,
+      ;; the rest share the remaining columns equally.
+      (let* ((others (remove current names))
+             (cur-w (min (string-width current) cap-w))
+             (per (max min-w (/ (- budget chrome cur-w)
+                                (max 1 (length others)))))
+             (per (if cap (min cap per) per)))
+        (seq-mapn
+         (lambda (n w)
+           (cons n (if (equal n current)
+                       (max min-w (- budget chrome (* per (length others))))
+                     (min w per))))
+         names full)))))
+
 (defun my-tab-bar-workspaces ()
-  "Tab-bar segment: perspective's workspace block.
-Reuses perspective's own rendering, so all workspaces are listed
-with the current one highlighted (and clickable)."
+  "Tab-bar segment: perspective's workspace block, fitted to one line.
+All workspaces are listed with the current one highlighted (and
+clickable), rendered by perspective itself.  The widget gets every
+free column left of the clock; when the names still do not fit,
+non-current names are shortened first, so the top bar never wraps
+to a second line.  See `my-desktop-tab-workspaces-max-width' and
+`my-desktop-tab-workspaces-name-width'."
   (condition-case nil
       (when (bound-and-true-p persp-mode)
-        (apply #'concat (persp-mode-line)))
+        (let* ((open (nth 0 persp-modestring-dividers))
+               (close (nth 1 persp-modestring-dividers))
+               (sep (nth 2 persp-modestring-dividers))
+               (current (or (persp-current-name) ""))
+               (names (if persp-modestring-short
+                          (list current)
+                        (persp-names)))
+               (budget (or my-desktop-tab-workspaces-max-width
+                           (my-tab-bar--free-columns)))
+               (plan (my-tab-bar--ws-plan names current budget))
+               (block (mapconcat (lambda (nw)
+                                   (my-tab-bar--ws-clip (car nw) (cdr nw)))
+                                 plan sep)))
+          ;; Last resort: even a clamped plan must not exceed BUDGET.
+          (truncate-string-to-width
+           (concat open block close)
+           budget nil nil my-tab-bar--ws-ellipsis)))
     (error nil)))
 
 (defun my-tab-bar-refresh ()

@@ -194,6 +194,9 @@ Always include `lexical-binding: t` at the top of every file.
     `C-c t` / `C-c T` (terminal), `C-c p` (music play/pause),
     `C-c M-w` (copy image at point), `C-x x f` (apheleia format,
     bound by desktop-edit.el when `my-desktop-enable-apheleia').
+  - `RET` in Dired opens video files (`my-desktop-video-extensions`)
+    with `my-desktop-video-player` (default `mpv`), other files use
+    `dired-find-file` as usual (see modules/desktop-fm.el).
   - `s-*` - roguelike copilot (Super prefix, bound in
     `my-roguelike-keymap`, active only in game terminal buffers via
     `my-roguelike-mode`; see modules/desktop-roguelike.el).

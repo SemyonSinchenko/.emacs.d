@@ -172,6 +172,21 @@ rename (sidebar keys and C-c w ...) to shape it."
   :type 'string
   :group 'my-desktop)
 
+(defcustom my-desktop-tab-workspaces-max-width nil
+  "Max width in columns of the top-bar workspaces widget.
+Nil (the default) gives the widget every free column left of the
+clock: workspace names are shortened only when the widget would
+otherwise wrap the top bar to a second line."
+  :type '(choice integer (const nil))
+  :group 'my-desktop)
+
+(defcustom my-desktop-tab-workspaces-name-width nil
+  "Max width in columns of one workspace name in the top bar.
+Longer names end with an ellipsis.  Nil (the default) keeps full
+names while there is room."
+  :type '(choice integer (const nil))
+  :group 'my-desktop)
+
 (defcustom my-desktop-treemacs-root "~"
   "Root directory the treemacs sidebar offers in every workspace.
 It is seeded once per workspace, so the sidebar never asks for a
@@ -285,6 +300,24 @@ Toggle visibility in a Dired buffer with M-x `my-dired-toggle-hidden'."
   "Regexp of file names Dired hides when `my-desktop-dired-hide-dotfiles' is on.
 By default every name starting with a dot (dotfiles) is hidden."
   :type 'regexp
+  :group 'my-desktop)
+
+(defcustom my-desktop-video-player "mpv"
+  "Command used to play video files, e.g. \"mpv\" or \"mpv --fs\".
+Used by Dired (RET on a video file, see `my-desktop-video-extensions')
+and by telega (video messages).  telega's own default prefers ffplay
+when ffmpeg is installed, which renders some codecs as a garbled
+picture with working sound; \"mpv\" fixes that.  Set to nil to
+disable: telega falls back to its own default player and Dired opens
+videos in Emacs."
+  :type '(choice (const :tag "Disabled (Emacs / telega defaults)" nil)
+                 (string :tag "Player command"))
+  :group 'my-desktop)
+
+(defcustom my-desktop-video-extensions
+  '("mp4" "mkv" "webm" "m4v" "avi" "mov" "mpg" "mpeg" "wmv" "flv" "ogv" "ts")
+  "Video file extensions Dired opens with `my-desktop-video-player'."
+  :type '(repeat string)
   :group 'my-desktop)
 
 (defcustom my-desktop-enable-popper t

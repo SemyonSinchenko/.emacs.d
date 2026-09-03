@@ -63,6 +63,10 @@
 ;; (setq my-desktop-treemacs-root "~/")  ; sidebar root in each workspace
 (setq my-desktop-sidebar-autoshow nil) ; show with C-c ` when needed
 (setq my-desktop-sidebar-fraction 6)   ; sidebar = 1/6 of frame width
+;; Top-bar workspaces widget: fits into the free strip left of the
+;; clock; names shorten only when the bar would wrap to 2 lines.
+;; (setq my-desktop-tab-workspaces-name-width 12) ; cap every name
+;; (setq my-desktop-tab-workspaces-max-width 60)  ; cap the widget
 
 ;; ------------------------------------------------------------------
 ;; 4. Terminal
@@ -84,6 +88,11 @@
 (setq my-desktop-enable-dirvish t)
 ;; Dired starts with dotfiles hidden; M-x my-dired-toggle-hidden shows them:
 (setq my-desktop-dired-hide-dotfiles t)
+;; Videos go to mpv: telega video messages and Dired (RET on a video
+;; file).  ffplay (telega's default when ffmpeg is installed) garbles
+;; the picture for some codecs.  Set to nil for stock behavior.
+(setq my-desktop-video-player "mpv")
+;; (setq my-desktop-video-extensions '("mp4" "mkv" "webm" "m4v" "avi" "mov"))
 (setq my-desktop-enable-popper t)
 (setq my-desktop-enable-org-roam t)
 (setq my-desktop-enable-org-modern t)
