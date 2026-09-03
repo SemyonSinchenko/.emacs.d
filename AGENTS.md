@@ -45,6 +45,8 @@ configurations**:
 │   ├── desktop-torrent.el   # transmission-daemon RPC UI
 │   ├── desktop-comms.el     # Telegram via telega (native or docker TDLib)
 │   ├── desktop-ai.el        # gptel assistant with hard-restricted tools
+│   ├── desktop-edit.el      # JSON/YAML/TOML/Markdown/CSV editing + apheleia
+│   ├── desktop-lexicon.el   # lexicon-org AI text transforms
 │   ├── lang-lsp.el          # Eglot (LSP), treesit-auto, Flymake, Apheleia
 │   ├── lang-prog.el         # Language settings (Python, Java, Scala, Rust, ...)
 │   ├── lang-metals-v2.el    # Opt-in Scala Metals v2 (enabled by `my-use-metals-v2')
@@ -185,10 +187,13 @@ Always include `lexical-binding: t` at the top of every file.
     buffer overview); `C-x b` / `C-x k` are workspace-scoped.
   - `C-c s` - social prefix (b bluesky, h hackernews, l lemmy, r reddit,
     t telegram); `C-c a` - AI prefix (a chat, o open session, l search,
-    g gptel-menu, z Z-AI usage, ...).
+    g gptel-menu, z Z-AI usage, ...); `C-c l` - lexicon prefix (t
+    transform, p prompt, d download, s status, r remove-last), bound
+    only when `desktop-lexicon' is loaded.
   - Top level: ``C-c ` `` (treemacs sidebar), `C-c m` (sync menu),
     `C-c t` / `C-c T` (terminal), `C-c p` (music play/pause),
-    `C-c M-w` (copy image at point).
+    `C-c M-w` (copy image at point), `C-x x f` (apheleia format,
+    bound by desktop-edit.el when `my-desktop-enable-apheleia').
   - `s-*` - roguelike copilot (Super prefix, bound in
     `my-roguelike-keymap`, active only in game terminal buffers via
     `my-roguelike-mode`; see modules/desktop-roguelike.el).

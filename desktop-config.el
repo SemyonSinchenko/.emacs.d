@@ -96,6 +96,8 @@
 ;;       '((( :server "1.2.3.4" :port 8080 :enable t
 ;;            :type (:@type "proxyTypeSocks5" :username "u" :password "p")))))
 (setq my-desktop-enable-quelpa nil)
+(setq my-desktop-enable-apheleia t)     ; format on save in configs, C-x x f
+(setq my-desktop-enable-lexicon t)      ; AI text transforms, needs my-desktop-lexicon-dir
 
 ;; ------------------------------------------------------------------
 ;; 5b. Social feeds
@@ -188,6 +190,24 @@
 ;; (setq my-desktop-keybindings
 ;;       '((global ("C-c z" . my-sidebar-toggle))
 ;;         (dired  ("C-c e" . my-reader-open-manga))))
+
+;; ------------------------------------------------------------------
+;; 12. Config/data editing (desktop-edit) and lexicon
+;; ------------------------------------------------------------------
+
+;; JSON/JS/TS indent width (apheleia's prettier follows it too):
+;; (setq my-desktop-json-indent-level 2)
+;; Markdown preview converter:
+;; (setq my-desktop-markdown-command "multimarkdown")
+;; CSV: alignment width and size limits for auto-align/rainbow colors:
+;; (setq my-desktop-csv-align-width 40)
+;; (setq my-desktop-csv-align-size-limit (* 10 1024 1024))
+;; (setq my-desktop-rainbow-csv-size-limit (* 10 1024 1024))
+;; lexicon-org location (AI text transforms, C-c l ...); the module
+;; warns and stays off until the checkout exists:
+;; (setq my-desktop-lexicon-dir "~/github/Lexicon/emacs")
+;; lexicon-cli backend (LEXICON_INFERENCE); nil keeps the tool default:
+;; (setq my-desktop-lexicon-inference "bundled")
 
 (provide 'desktop-config)
 ;;; desktop-config.el ends here

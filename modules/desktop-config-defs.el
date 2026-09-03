@@ -344,6 +344,19 @@ blocked.  Each entry is a plist as documented in
   :type 'boolean
   :group 'my-desktop)
 
+(defcustom my-desktop-enable-apheleia t
+  "Format code/config buffers with apheleia: automatically in
+JSON/YAML/TOML buffers, on demand with C-x x f.  Formatter wiring
+mirrors modules/lang-lsp.el (ruff for Python)."
+  :type 'boolean
+  :group 'my-desktop)
+
+(defcustom my-desktop-enable-lexicon t
+  "Load the lexicon-org module (AI text transforms, C-c l ...).
+Needs the local checkout from `my-desktop-lexicon-dir'."
+  :type 'boolean
+  :group 'my-desktop)
+
 ;; ------------------------------------------------------------------
 ;; 6. RSS
 ;; ------------------------------------------------------------------
@@ -595,6 +608,52 @@ Example:
   ((global (\"C-c z\" . my-sidebar-toggle))
     (dired  (\"C-c e\" . my-reader-open-manga)))"
   :type '(repeat cons)
+  :group 'my-desktop)
+
+;; ------------------------------------------------------------------
+;; 12. Config/data editing (desktop-edit) and lexicon
+;; ------------------------------------------------------------------
+
+(defcustom my-desktop-json-indent-level 2
+  "Indent width for JSON/JS/TS buffers.
+Sets `js-indent-level', `json-ts-mode-indent-offset' and
+`typescript-ts-mode-indent-offset'; apheleia's prettier invocation
+reads the same variables, as in the IDE."
+  :type 'integer
+  :group 'my-desktop)
+
+(defcustom my-desktop-markdown-command "multimarkdown"
+  "External command rendering Markdown previews (`markdown-command')."
+  :type 'string
+  :group 'my-desktop)
+
+(defcustom my-desktop-csv-align-width 40
+  "Alignment width passed to `csv-align-max-width' in CSV/TSV buffers."
+  :type 'integer
+  :group 'my-desktop)
+
+(defcustom my-desktop-csv-align-size-limit (* 10 1024 1024)
+  "Auto-align (csv-align-mode) only CSV/TSV buffers smaller than this."
+  :type 'integer
+  :group 'my-desktop)
+
+(defcustom my-desktop-rainbow-csv-size-limit (* 10 1024 1024)
+  "Enable rainbow-csv only in CSV/TSV buffers smaller than this."
+  :type 'integer
+  :group 'my-desktop)
+
+(defcustom my-desktop-lexicon-dir "~/github/Lexicon/emacs"
+  "Directory of the local lexicon-org checkout (the folder that
+contains lexicon-org.el).  When it does not exist, the lexicon
+module is skipped with a warning.  Set nil to disable explicitly."
+  :type '(choice directory (const nil))
+  :group 'my-desktop)
+
+(defcustom my-desktop-lexicon-inference "bundled"
+  "Value exported as the LEXICON_INFERENCE environment variable
+for lexicon-cli.  \"bundled\" forces the local llama.cpp backend;
+nil keeps the tool default."
+  :type '(choice string (const nil))
   :group 'my-desktop)
 
 (provide 'desktop-config-defs)

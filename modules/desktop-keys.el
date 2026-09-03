@@ -25,6 +25,12 @@
 (defvar my-ai-map (make-sparse-keymap)
   "Nested keymap of AI commands, bound to C-c a.")
 
+(defvar my-lexicon-map (make-sparse-keymap)
+  "Nested keymap of lexicon AI text transforms, bound to C-c l.
+Only bound when the lexicon module is loaded; the commands come
+from the local lexicon-org checkout (see
+`my-desktop-lexicon-dir').")
+
 ;; Roguelike copilot: Super-prefixed commands, active only in game
 ;; terminal buffers.  The keymap itself is defined by
 ;; desktop-roguelike.el, which loads before this file.
@@ -57,7 +63,12 @@
         ("g" . gptel-menu)            ; gptel settings menu
         ("l" . my-ai-session-search)  ; search sessions
         ("s" . my-ai-session-save)    ; save session now
-        ("z" . my-ai-zai-usage))))    ; Z-AI coding plan usage
+        ("z" . my-ai-zai-usage))      ; Z-AI coding plan usage
+    (lexicon ("t" . lexicon-org-transform)        ; transform region
+             ("p" . lexicon-org-transform-prompt) ; prompt for transform
+             ("d" . lexicon-org-download)         ; download model
+             ("s" . lexicon-org-status)           ; show status
+             ("r" . lexicon-org-remove-last))))   ; undo last transform
 
 (defun my-keys--bind (map key command)
   "Bind KEY to COMMAND in MAP, warning about problems."
@@ -87,6 +98,13 @@
     ('ai
      (dolist (b binds)
        (my-keys--bind my-ai-map (car b) (cdr b))))
+    ('lexicon
+     ;; Bound only when the lexicon-org autoloads exist (the module
+     ;; is loaded AND the checkout is installed); otherwise skip
+     ;; silently -- the module already warned.
+     (when (fboundp 'lexicon-org-transform)
+       (dolist (b binds)
+         (my-keys--bind my-lexicon-map (car b) (cdr b)))))
     ('roguelike
      (dolist (b binds)
        (my-keys--bind my-roguelike-keymap (car b) (cdr b))))
@@ -98,6 +116,8 @@
     (my-keys--apply-context (car entry) (cdr entry)))
   (define-key global-map (kbd "C-c s") my-social-map)
   (define-key global-map (kbd "C-c a") my-ai-map)
+  (when (fboundp 'lexicon-org-transform)
+    (define-key global-map (kbd "C-c l") my-lexicon-map))
   (dolist (entry (append my-desktop-keybindings nil))
     (my-keys--apply-context (car entry) (cdr entry))))
 
@@ -129,6 +149,8 @@
      :if (lambda () (fboundp 'my-ai-chat)))
     ("z" "Z-AI usage" my-ai-zai-usage
      :if (lambda () (fboundp 'my-ai-zai-usage)))
+    ("l" "Lexicon transform" lexicon-org-transform
+     :if (lambda () (fboundp 'lexicon-org-transform)))
     ("m" "Music library" my-media-music-library
      :if (lambda () (fboundp 'my-media-music-library)))
     ("e" "Elfeed" my-rss-open
