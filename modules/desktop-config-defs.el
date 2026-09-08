@@ -402,6 +402,12 @@ Needs the local checkout from `my-desktop-lexicon-dir'."
   :type 'boolean
   :group 'my-desktop)
 
+(defcustom my-desktop-enable-kitsu t
+  "Load the Kitsu tracker module (dashboard, search and trending
+in org files).  Credentials come from `my-desktop-kitsu-auth-file'."
+  :type 'boolean
+  :group 'my-desktop)
+
 ;; ------------------------------------------------------------------
 ;; 6. RSS
 ;; ------------------------------------------------------------------
@@ -699,6 +705,55 @@ module is skipped with a warning.  Set nil to disable explicitly."
 for lexicon-cli.  \"bundled\" forces the local llama.cpp backend;
 nil keeps the tool default."
   :type '(choice string (const nil))
+  :group 'my-desktop)
+
+;; ------------------------------------------------------------------
+;; 13. Kitsu tracker (kitsu.app)
+;; ------------------------------------------------------------------
+
+(defcustom my-desktop-kitsu-api-base "https://kitsu.io/api"
+  "Base URL of the Kitsu API (kitsu.io serves the kitsu.app API)."
+  :type 'string
+  :group 'my-desktop)
+
+(defcustom my-desktop-kitsu-auth-file
+  (expand-file-name ".kitsuauth" user-emacs-directory)
+  "File with kitsu.app credentials, two lines: \"user: ...\" and
+\"password: ...\".  It MUST stay git-ignored: the module refuses to
+run when git tracks the file and warns when it is not ignored."
+  :type 'file
+  :group 'my-desktop)
+
+(defcustom my-desktop-kitsu-org-file
+  (expand-file-name "kitsu.org" my-desktop-org-dir)
+  "Org file of the Kitsu dashboard (one dynamic block per section)."
+  :type 'file
+  :group 'my-desktop)
+
+(defcustom my-desktop-kitsu-search-file
+  (expand-file-name "kitsu-search.org" my-desktop-org-dir)
+  "Org file with saved Kitsu searches (kitsu-search dynamic blocks)."
+  :type 'file
+  :group 'my-desktop)
+
+(defcustom my-desktop-kitsu-trending-file
+  (expand-file-name "kitsu-trending.org" my-desktop-org-dir)
+  "Org file for Kitsu trending charts (kitsu-trending dynamic block)."
+  :type 'file
+  :group 'my-desktop)
+
+(defcustom my-desktop-kitsu-dashboard-sections
+  '((manga . current) (manga . planned) (manga . completed))
+  "Dashboard sections as (KIND . STATUS) pairs in display order.
+KIND is manga or anime; STATUS is a Kitsu library status:
+current, planned, completed, on_hold, dropped."
+  :type '(repeat cons)
+  :group 'my-desktop)
+
+(defcustom my-desktop-kitsu-trending-size 50
+  "Entry count of the all-time trending chart.
+The API pages 20 items at a time, so 50 means 3 requests."
+  :type 'integer
   :group 'my-desktop)
 
 (provide 'desktop-config-defs)

@@ -197,6 +197,7 @@
              (desktop-roguelike . my-desktop-enable-roguelike)
              desktop-edit
              (desktop-lexicon . my-desktop-enable-lexicon)
+             (desktop-kitsu . my-desktop-enable-kitsu)
              desktop-keys))
   (if (consp m)
       (my-desktop--load-module (car m) (cdr m))

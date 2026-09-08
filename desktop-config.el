@@ -109,6 +109,11 @@
 (setq my-desktop-enable-quelpa nil)
 (setq my-desktop-enable-apheleia t)     ; format on save in configs, C-x x f
 (setq my-desktop-enable-lexicon t)      ; AI text transforms, needs my-desktop-lexicon-dir
+(setq my-desktop-enable-kitsu t)        ; kitsu.app tracker: dashboard, search, trending
+;; Kitsu credentials live in .kitsuauth (git-ignored), two lines:
+;;   user: you@example.com
+;;   password: ...
+;; (setq my-desktop-kitsu-auth-file "~/.emacs.d/.kitsuauth")
 
 ;; ------------------------------------------------------------------
 ;; 5b. Social feeds

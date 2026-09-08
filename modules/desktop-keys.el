@@ -31,6 +31,11 @@ Only bound when the lexicon module is loaded; the commands come
 from the local lexicon-org checkout (see
 `my-desktop-lexicon-dir').")
 
+(defvar my-kitsu-map (make-sparse-keymap)
+  "Nested keymap of Kitsu tracker commands, bound to C-c K.
+Only bound when the kitsu module is loaded
+(`my-desktop-enable-kitsu').")
+
 ;; Roguelike copilot: Super-prefixed commands, active only in game
 ;; terminal buffers.  The keymap itself is defined by
 ;; desktop-roguelike.el, which loads before this file.
@@ -69,7 +74,10 @@ from the local lexicon-org checkout (see
              ("p" . lexicon-org-transform-prompt) ; prompt for transform
              ("d" . lexicon-org-download)         ; download model
              ("s" . lexicon-org-status)           ; show status
-             ("r" . lexicon-org-remove-last))))   ; undo last transform
+             ("r" . lexicon-org-remove-last))    ; undo last transform
+    (kitsu ("d" . my-kitsu-dashboard)            ; dashboard org file
+           ("s" . my-kitsu-search)               ; saved searches org file
+           ("t" . my-kitsu-trending))))          ; trending: kind x period
 
 (defun my-keys--bind (map key command)
   "Bind KEY to COMMAND in MAP, warning about problems."
@@ -109,6 +117,9 @@ from the local lexicon-org checkout (see
     ('roguelike
      (dolist (b binds)
        (my-keys--bind my-roguelike-keymap (car b) (cdr b))))
+    ('kitsu
+     (dolist (b binds)
+       (my-keys--bind my-kitsu-map (car b) (cdr b))))
     (_ (my-desktop--warn "unknown keybinding context %S" context))))
 
 (defun my-keys-apply ()
@@ -119,6 +130,8 @@ from the local lexicon-org checkout (see
   (define-key global-map (kbd "C-c a") my-ai-map)
   (when (fboundp 'lexicon-org-transform)
     (define-key global-map (kbd "C-c l") my-lexicon-map))
+  (when (fboundp 'my-kitsu-dashboard)
+    (define-key global-map (kbd "C-c K") my-kitsu-map))
   (dolist (entry (append my-desktop-keybindings nil))
     (my-keys--apply-context (car entry) (cdr entry))))
 
@@ -165,7 +178,9 @@ from the local lexicon-org checkout (see
     ("T" "Telegram" my-telega
      :if (lambda () (fboundp 'my-telega)))
     ("R" "Reddit" my-reddit
-     :if (lambda () (fboundp 'my-reddit)))]
+     :if (lambda () (fboundp 'my-reddit)))
+    ("K" "Kitsu menu" my-kitsu-menu
+     :if (lambda () (fboundp 'my-kitsu-menu)))]
    ["System"
     ("s" "Sync menu" my-sync-menu
      :if (lambda () (fboundp 'my-sync-menu)))
