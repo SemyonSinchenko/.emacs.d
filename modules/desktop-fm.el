@@ -53,12 +53,24 @@ names matching that regexp (dotfiles by default) appear and disappear."
   "Play FILE with `my-desktop-video-player'."
   (let* ((cmd (append (split-string my-desktop-video-player nil t)
                       (list (expand-file-name file))))
-         (buf (get-buffer-create " *my-video-player*")))
+         (buf (get-buffer-create
+               (format " *my-video-player: %s*"
+                       (file-name-nondirectory file)))))
     (with-current-buffer buf
       (erase-buffer))
     (let ((proc (apply #'start-process "my-video-player" buf cmd)))
       ;; Do not ask about the running player when quitting Emacs
       (set-process-query-on-exit-flag proc nil)
+      ;; Player failures (e.g. a codec the system cannot decode) are
+      ;; silent in mpv unless someone looks at its output; surface them
+      (set-process-sentinel
+       proc (lambda (proc _event)
+              (let ((code (process-exit-status proc)))
+                (if (zerop code)
+                    (message "Video player finished")
+                  (message
+                   "Video player exited with code %S -- see buffer %s"
+                   code (buffer-name (process-buffer proc)))))))
       (message "Playing %s with %s"
                (file-name-nondirectory file) my-desktop-video-player))))
 

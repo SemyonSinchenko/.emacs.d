@@ -91,7 +91,7 @@
 ;; Videos go to mpv: telega video messages and Dired (RET on a video
 ;; file).  ffplay (telega's default when ffmpeg is installed) garbles
 ;; the picture for some codecs.  Set to nil for stock behavior.
-(setq my-desktop-video-player "mpv")
+(setq my-desktop-video-player "flatpak run org.videolan.VLC")
 ;; (setq my-desktop-video-extensions '("mp4" "mkv" "webm" "m4v" "avi" "mov"))
 (setq my-desktop-enable-popper t)
 (setq my-desktop-enable-org-roam t)
