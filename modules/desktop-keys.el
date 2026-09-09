@@ -159,7 +159,7 @@ Only bound when the kitsu module is loaded
    ["Apps"
     ("t" "New terminal" my-term-new
      :if (lambda () (fboundp 'my-term-new)))
-    ("a" "AI chat" my-ai-chat
+    ("a" "New AI chat" my-ai-chat
      :if (lambda () (fboundp 'my-ai-chat)))
     ("z" "Z-AI usage" my-ai-zai-usage
      :if (lambda () (fboundp 'my-ai-zai-usage)))

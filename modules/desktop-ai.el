@@ -480,7 +480,9 @@ continue reading a previously fetched page"))
              :category "web"))))))
 
 (defun my-ai-chat ()
-  "Open a gptel chat buffer."
+  "Open a new gptel chat buffer.
+Each call starts a fresh session; existing chat buffers are left
+alone.  Resume saved sessions with `my-ai-session-open'."
   (interactive)
   (unless (fboundp 'gptel)
     (user-error "gptel is disabled or not installed"))
@@ -506,9 +508,15 @@ continue reading a previously fetched page"))
         ".  If a variable is NOT SET: GNOME-launched Emacs does not "
         "read ~/.bashrc -- use ~/.config/environment.d/ or launch "
         "from a terminal"))))
-  ;; One chat buffer per backend; interactivep t makes gptel display
-  ;; it.  (A bare (gptel) would pass no buffer name and do nothing.)
-  (gptel (format "*%s*" (gptel-backend-name gptel-backend))
+  ;; A unique buffer name per invocation: C-c a a always starts a
+  ;; fresh concurrent chat instead of switching to an existing one.
+  ;; Resume saved sessions with `my-ai-session-open' (C-c a o).
+  ;; interactivep t makes gptel display the new buffer.  (A bare
+  ;; (gptel) would pass no buffer name and do nothing.)
+  (gptel (generate-new-buffer-name
+          (format "*gptel-%s %s*"
+                  (gptel-backend-name gptel-backend)
+                  (format-time-string "%Y-%m-%d %H:%M")))
          nil nil t))
 
 ;; ------------------------------------------------------------------
