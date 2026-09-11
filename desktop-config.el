@@ -164,7 +164,7 @@
         (:name "deepseek"
           :type deepseek
           :key-env "DEEPSEEK_API_KEY"
-          :models (deepseek-v4-flash deepseek-v4-pro)  ; first = default
+          :models (deepseek-flash)  ; first = default
           :stream t)
         ))
 (setq my-desktop-ai-directives
