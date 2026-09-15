@@ -148,8 +148,17 @@
       '((:name "semsync"
                :remote "semdav:/"
                :local "~/Org/"
+               ;; refresh the back-sync baseline after every successful
+               ;; pull (right then, local == server)
+               :on-success my-sync-pull-refresh-baseline
                :args ("--create-empty-src-dirs" "--fast-list" "-v"
                       "--exclude" "elfeed/data/**"))))
+
+;; Back-sync (C-c m b): push the user-facing files back to the remote.
+;; The remote stays ground truth for everything else; if the server
+;; copy changed since the last exchange, the push is rejected and a
+;; diff3/smerge resolution session opens.
+(setq my-desktop-backsync-files '("inbox-mobile.org" "tasks.org"))
 
 ;; ------------------------------------------------------------------
 ;; 8. Torrent (transmission-daemon RPC)

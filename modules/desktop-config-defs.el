@@ -446,8 +446,27 @@ Each job is a plist:
   :name   label shown in menus
   :remote rclone remote path (source)
   :local  local directory (destination, ~ is expanded)
-  :args   list of extra rclone arguments."
+  :args   list of extra rclone arguments
+  :on-success optional function run after a successful non-dry-run
+              (the pull job uses `my-sync-pull-refresh-baseline' to
+              refresh the back-sync baseline)."
   :type '(repeat plist)
+  :group 'my-desktop)
+
+(defcustom my-desktop-backsync-files '("inbox-mobile.org" "tasks.org")
+  "Files (relative to `my-desktop-org-dir') pushed back to the remote
+by `my-sync-backsync'.  The remote stays ground truth for everything
+else; these are the user-facing exceptions.  On a server-side change
+the push is rejected and a conflict-resolution session opens."
+  :type '(repeat string)
+  :group 'my-desktop)
+
+(defcustom my-desktop-backsync-db-file
+  (expand-file-name ".cache/org-backsync.db" user-emacs-directory)
+  "SQLite database with the back-sync baseline: the server state of
+`my-desktop-backsync-files' at the last successful exchange.  Lives
+under `.cache/', which is git-ignored."
+  :type 'file
   :group 'my-desktop)
 
 ;; ------------------------------------------------------------------
