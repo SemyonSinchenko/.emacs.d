@@ -153,6 +153,11 @@ Below 100 the GNOME wallpaper shows through.  100 = opaque."
   :type 'boolean
   :group 'my-desktop)
 
+(defcustom my-desktop-ask-on-exit t
+  "Ask for confirmation before C-x C-c kills Emacs."
+  :type 'boolean
+  :group 'my-desktop)
+
 (defcustom my-desktop-banner-image nil
   "Path to an image (png/jpg/gif) shown on the Home tab.
 Nil uses the built-in text banner."

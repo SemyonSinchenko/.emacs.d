@@ -54,6 +54,8 @@
 ;; (setq my-desktop-use-icons t)         ; needs a Nerd Font installed
 (setq my-desktop-display-time t)
 (setq my-desktop-display-battery t)
+;; Confirm before C-x C-c:
+(setq my-desktop-ask-on-exit t)
 ;; (setq my-desktop-banner-image "~/Pictures/desktop-banner.png")
 (setq my-desktop-banner-title "Desktop")
 

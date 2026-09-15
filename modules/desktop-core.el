@@ -26,6 +26,16 @@
              (when battery-status-function (display-battery-mode 1)))
     (error nil)))
 
+;; Safe exit: confirm before C-x C-c kills Emacs (ported from the
+;; IDE core-keys.el).  The desktop keeps live processes --
+;; terminals, mpv, sync jobs -- that are easy to lose to a
+;; reflexive save-buffers-kill-emacs.
+(defun my-desktop--ask-before-exit ()
+  "Prompt the user for confirmation before killing Emacs."
+  (or (not my-desktop-ask-on-exit)
+      (y-or-n-p "Are you sure you want to exit?")))
+(add-hook 'kill-emacs-query-functions #'my-desktop--ask-before-exit)
+
 ;; recentf (feeds the Home tab "Recent files" widget).
 (defun my-desktop--enable-recentf ()
   (setq recentf-max-saved-items 200
