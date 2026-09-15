@@ -1,0 +1,5 @@
+# -*- mode: snippet -*-
+# name: Hugo Figure Shortcode
+# key: hugofigure
+# --
+{{< figure src="/ssinchenko/images/${1:path/to/image.png}" alt="${2:Alt text}" width="750px" align="center" >}}$0

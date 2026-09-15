@@ -37,6 +37,9 @@
 ;;   git clone https://codeberg.org/MonadicSheep/emacs-reader ~/src/emacs-reader
 ;;   cd ~/src/emacs-reader && make clean all
 (setq my-desktop-reader-dir "~/github/bins/emacs-reader")
+;; Personal yasnippet templates, shared with the other configs
+;; (e.g. snippets/org-mode/hugofigure):
+(setq my-desktop-snippets-dir "~/.emacs.d/snippets")
 
 ;; ------------------------------------------------------------------
 ;; 2. Appearance
@@ -108,6 +111,7 @@
 ;;            :type (:@type "proxyTypeSocks5" :username "u" :password "p")))))
 (setq my-desktop-enable-quelpa nil)
 (setq my-desktop-enable-apheleia t)     ; format on save in configs, C-x x f
+(setq my-desktop-enable-yasnippet t)    ; snippets from my-desktop-snippets-dir
 (setq my-desktop-enable-lexicon t)      ; AI text transforms, needs my-desktop-lexicon-dir
 (setq my-desktop-enable-kitsu t)        ; kitsu.app tracker: dashboard, search, trending
 ;; Kitsu credentials live in .kitsuauth (git-ignored), two lines:

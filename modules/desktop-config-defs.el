@@ -94,6 +94,14 @@ associations once installed."
   :type '(repeat cons)
   :group 'my-desktop)
 
+(defcustom my-desktop-snippets-dir
+  (expand-file-name "snippets" user-emacs-directory)
+  "Directory with personal yasnippet snippets, shared with the
+IDE and minimal editor configs (per-mode subdirectories, e.g.
+snippets/org-mode/hugofigure)."
+  :type 'directory
+  :group 'my-desktop)
+
 ;; ------------------------------------------------------------------
 ;; 2. Appearance
 ;; ------------------------------------------------------------------
@@ -393,6 +401,12 @@ blocked.  Each entry is a plist as documented in
   "Format code/config buffers with apheleia: automatically in
 JSON/YAML/TOML buffers, on demand with C-x x f.  Formatter wiring
 mirrors modules/lang-lsp.el (ruff for Python)."
+  :type 'boolean
+  :group 'my-desktop)
+
+(defcustom my-desktop-enable-yasnippet t
+  "Enable yasnippet in the Desktop, loading the personal snippets
+from `my-desktop-snippets-dir' (same templates as the IDE)."
   :type 'boolean
   :group 'my-desktop)
 

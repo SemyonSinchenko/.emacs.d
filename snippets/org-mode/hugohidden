@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: Hugo Details Shortcode
+# key: hugohidden
+# --
+{{< details summary="${1:Title}" >}}
+${2:Hidden content}
+{{< /details >}}$0

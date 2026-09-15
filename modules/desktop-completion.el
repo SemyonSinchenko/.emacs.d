@@ -62,5 +62,14 @@
   :ensure t
   :after (embark consult))
 
+;; --- Snippets (templates from my-desktop-snippets-dir) ---
+
+(when my-desktop-enable-yasnippet
+  (use-package yasnippet
+    :custom
+    (yas-snippet-dirs (list my-desktop-snippets-dir))
+    :config
+    (yas-global-mode 1)))
+
 (provide 'desktop-completion)
 ;;; desktop-completion.el ends here
