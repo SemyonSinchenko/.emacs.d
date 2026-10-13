@@ -36,6 +36,14 @@ from the local lexicon-org checkout (see
 Only bound when the kitsu module is loaded
 (`my-desktop-enable-kitsu').")
 
+(defvar my-org-map (make-sparse-keymap)
+  "Nested keymap of org commands (agenda), bound to C-c o.
+`my-pomodoro-map' is nested under C-c o p.")
+
+(defvar my-pomodoro-map (make-sparse-keymap)
+  "Nested keymap of pomodoro (pomm) commands, bound to C-c o p.
+Only populated when the pomodoro module is loaded.")
+
 ;; Roguelike copilot: Super-prefixed commands, active only in game
 ;; terminal buffers.  The keymap itself is defined by
 ;; desktop-roguelike.el, which loads before this file.
@@ -84,7 +92,15 @@ Only bound when the kitsu module is loaded
              ("r" . lexicon-org-remove-last))    ; undo last transform
     (kitsu ("d" . my-kitsu-dashboard)            ; dashboard org file
            ("s" . my-kitsu-search)               ; saved searches org file
-           ("t" . my-kitsu-trending))))          ; trending: kind x period
+           ("t" . my-kitsu-trending))            ; trending: kind x period
+    (org ("a" . org-agenda)                      ; agenda dispatcher
+         ("t" . org-todo-list))                  ; TODOs from the agenda files
+    (pomodoro ("p" . pomm)                       ; transient UI
+              ("s" . pomm-start)                 ; start / resume
+              ("S" . pomm-stop)
+              ("P" . pomm-pause)
+              ("c" . pomm-set-context)           ; task for the period
+              ("m" . pomm-mode-line-mode))))     ; timer in the modeline
 
 (defun my-keys--bind (map key command)
   "Bind KEY to COMMAND in MAP, warning about problems."
@@ -127,6 +143,15 @@ Only bound when the kitsu module is loaded
     ('kitsu
      (dolist (b binds)
        (my-keys--bind my-kitsu-map (car b) (cdr b))))
+    ('org
+     (dolist (b binds)
+       (my-keys--bind my-org-map (car b) (cdr b))))
+    ('pomodoro
+     ;; Bound only when the pomodoro module is loaded; the C-c o p
+     ;; prefix itself is wired in `my-keys-apply'.
+     (when (fboundp 'pomm-start)
+       (dolist (b binds)
+         (my-keys--bind my-pomodoro-map (car b) (cdr b)))))
     (_ (my-desktop--warn "unknown keybinding context %S" context))))
 
 (defun my-keys-apply ()
@@ -139,6 +164,10 @@ Only bound when the kitsu module is loaded
     (define-key global-map (kbd "C-c l") my-lexicon-map))
   (when (fboundp 'my-kitsu-dashboard)
     (define-key global-map (kbd "C-c K") my-kitsu-map))
+  (when (fboundp 'org-agenda)
+    (define-key global-map (kbd "C-c o") my-org-map)
+    (when (fboundp 'pomm-start)
+      (define-key my-org-map (kbd "p") my-pomodoro-map)))
   (dolist (entry (append my-desktop-keybindings nil))
     (my-keys--apply-context (car entry) (cdr entry))))
 
@@ -187,7 +216,11 @@ Only bound when the kitsu module is loaded
     ("R" "Reddit" my-reddit
      :if (lambda () (fboundp 'my-reddit)))
     ("K" "Kitsu menu" my-kitsu-menu
-     :if (lambda () (fboundp 'my-kitsu-menu)))]
+     :if (lambda () (fboundp 'my-kitsu-menu)))
+    ("o" "Org agenda" org-agenda
+     :if (lambda () (fboundp 'org-agenda)))
+    ("p" "Pomodoro" pomm
+     :if (lambda () (fboundp 'pomm)))]
    ["System"
     ("s" "Sync menu" my-sync-menu
      :if (lambda () (fboundp 'my-sync-menu)))

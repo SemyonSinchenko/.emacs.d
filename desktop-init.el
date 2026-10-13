@@ -186,6 +186,7 @@
              (desktop-term . my-desktop-enable-ghostel)
              desktop-fm
              desktop-org
+             (desktop-pomodoro . my-desktop-enable-pomodoro)
              (desktop-reader . my-desktop-enable-reader)
              (desktop-media . my-desktop-enable-media)
              (desktop-rss . my-desktop-enable-rss)

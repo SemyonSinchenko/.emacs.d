@@ -25,7 +25,7 @@
 
 (setq my-desktop-org-dir "~/Org")
 (setq my-desktop-org-roam-dir "~/Org/org-roam/org-files/")
-;; (setq my-desktop-org-agenda-files '("~/Org/agenda.org"))
+(setq my-desktop-org-agenda-files '("~/Org/tasks.org"))
 (setq my-desktop-manga-dir "~/Nextcloud/Books/Manga/")
 (setq my-desktop-music-dir "~/Nextcloud/Music/")
 (setq my-desktop-downloads-dir "~/Downloads")
@@ -101,6 +101,17 @@
 (setq my-desktop-enable-popper t)
 (setq my-desktop-enable-org-roam t)
 (setq my-desktop-enable-org-modern t)
+;; Pomodoro (pomm.el) under C-c o p.  GNOME notifications go over
+;; D-Bus on every period change, work periods sync org-clock, the
+;; bell plays when aplay/afplay is available:
+(setq my-desktop-enable-pomodoro t)
+;; (setq my-desktop-pomodoro-work-minutes 25)
+;; (setq my-desktop-pomodoro-short-break-minutes 5)
+;; (setq my-desktop-pomodoro-long-break-minutes 25)
+;; (setq my-desktop-pomodoro-periods-per-round 4)
+;; (setq my-desktop-pomodoro-notifications nil)
+;; (setq my-desktop-pomodoro-org-clock nil)
+;; (setq my-desktop-pomodoro-sound nil)
 (setq my-desktop-enable-ai t)
 (setq my-desktop-enable-torrent nil)    ; needs transmission-daemon
 (setq my-desktop-enable-telega t)

@@ -37,6 +37,7 @@ configurations**:
 │   ├── desktop-fm.el        # Dired / dirvish file management
 │   ├── desktop-kitsu.el     # Kitsu tracker: org dashboard, search, trending
 │   ├── desktop-org.el       # Org + org-roam (Desktop daemon owns the roam DB)
+│   ├── desktop-pomodoro.el  # pomm.el pomodoro timer + GNOME dbus notifications
 │   ├── desktop-reader.el    # EPUB/CBZ/... reading + reading log
 │   ├── desktop-roguelike.el # Roguelike copilot: ghostel game + gptel advisor
 │   ├── desktop-media.el     # listen.el (mpv) music
@@ -193,7 +194,10 @@ Always include `lexical-binding: t` at the top of every file.
     o open chat, r rename chat, l search, s save, g gptel-menu,
     z Z-AI usage); `C-c l` - lexicon prefix (t
     transform, p prompt, d download, s status, r remove-last), bound
-    only when `desktop-lexicon' is loaded.
+    only when `desktop-lexicon' is loaded; `C-c o` - org prefix
+    (a agenda, t todo list; `p` nested pomodoro prefix: p transient,
+    s/S/P start/stop/pause, c context, m modeline toggle) with the
+    pomodoro sub-keys bound only when `desktop-pomodoro' is loaded.
   - Top level: ``C-c ` `` (treemacs sidebar), `C-c m` (sync menu),
     `C-c t` / `C-c T` (terminal), `C-c p` (music play/pause),
     `C-c M-w` (copy image at point), `C-x x f` (apheleia format,

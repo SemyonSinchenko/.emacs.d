@@ -366,6 +366,11 @@ videos in Emacs."
   :type 'boolean
   :group 'my-desktop)
 
+(defcustom my-desktop-enable-pomodoro t
+  "Load the pomodoro module (pomm.el, C-c o p ...)."
+  :type 'boolean
+  :group 'my-desktop)
+
 (defcustom my-desktop-reader-install nil
   "Reserved: install emacs-reader automatically (not implemented yet).
 Until then: build it yourself, see
@@ -822,6 +827,47 @@ current, planned, completed, on_hold, dropped."
   "Entry count of the all-time trending chart.
 The API pages 20 items at a time, so 50 means 3 requests."
   :type 'integer
+  :group 'my-desktop)
+
+;; ------------------------------------------------------------------
+;; 14. Pomodoro (pomm.el)
+;; ------------------------------------------------------------------
+
+(defcustom my-desktop-pomodoro-work-minutes 25
+  "Work period length, minutes."
+  :type 'integer
+  :group 'my-desktop)
+
+(defcustom my-desktop-pomodoro-short-break-minutes 5
+  "Short break length, minutes."
+  :type 'integer
+  :group 'my-desktop)
+
+(defcustom my-desktop-pomodoro-long-break-minutes 25
+  "Long break length, minutes."
+  :type 'integer
+  :group 'my-desktop)
+
+(defcustom my-desktop-pomodoro-periods-per-round 4
+  "Work periods before a long break."
+  :type 'integer
+  :group 'my-desktop)
+
+(defcustom my-desktop-pomodoro-notifications t
+  "Send GNOME notifications (D-Bus) on pomodoro period changes."
+  :type 'boolean
+  :group 'my-desktop)
+
+(defcustom my-desktop-pomodoro-org-clock t
+  "Sync org-clock with the pomodoro timer: `org-clock-in-last' when
+a work period starts, `org-clock-out' on breaks and stops."
+  :type 'boolean
+  :group 'my-desktop)
+
+(defcustom my-desktop-pomodoro-sound t
+  "Play the pomm bell on period switches.  Needs a .wav player
+(aplay or afplay); silently stays off when none is found."
+  :type 'boolean
   :group 'my-desktop)
 
 (provide 'desktop-config-defs)
