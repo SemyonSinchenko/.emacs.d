@@ -226,6 +226,16 @@
 ;; (setq my-desktop-roguelike-model 'deepseek-v4-flash)
 
 ;; ------------------------------------------------------------------
+;; 9c. DSH (DeepSeek Harness in a dev container).  Needs the run-dsh
+;;     launcher on PATH:
+;;       ln -s ~/sem-dev-container/bins/run-dsh ~/.local/bin/run-dsh
+;;     First use: C-c d  (ask for a folder; dsh-emacs opens when the
+;;     container prints its URL).  M-x my-dsh-open-web for the
+;;     one-time provider/model setup in the browser.
+;; ------------------------------------------------------------------
+(setq my-desktop-enable-dsh t)
+
+;; ------------------------------------------------------------------
 ;; 10. Home tab
 ;; ------------------------------------------------------------------
 

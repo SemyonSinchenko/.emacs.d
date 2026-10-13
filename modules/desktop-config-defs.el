@@ -628,6 +628,30 @@ The tool result states the offset to continue from."
   :group 'my-desktop)
 
 ;; ------------------------------------------------------------------
+;; 9b. DSH (DeepSeek Harness dev container, see sem-dev-container)
+;; ------------------------------------------------------------------
+
+(defcustom my-desktop-enable-dsh nil
+  "Load desktop-dsh: start/reconnect DSH containers from the Desktop.
+Needs the `run-dsh' launcher (sem-dev-container/bins/run-dsh,
+symlinked into ~/.local/bin) and podman/docker."
+  :type 'boolean
+  :group 'my-desktop)
+
+(defcustom my-desktop-dsh-command "run-dsh"
+  "Launcher program for the DSH dev container.
+Resolved on `exec-path'; set to an absolute path to override."
+  :type 'string
+  :group 'my-desktop)
+
+(defcustom my-desktop-dsh-wait-seconds 120
+  "Seconds before the still-starting notice for a DSH container.
+The first run on a machine initializes the dsh profile (pnpm) and
+can take minutes; later starts answer in seconds."
+  :type 'integer
+  :group 'my-desktop)
+
+;; ------------------------------------------------------------------
 ;; Roguelike copilot (NetHack etc.)
 ;; ------------------------------------------------------------------
 

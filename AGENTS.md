@@ -190,9 +190,9 @@ Always include `lexical-binding: t` at the top of every file.
   - `C-c s` - social prefix (b bluesky, h hackernews, l lemmy, r reddit,
     t telegram); `C-c K` - kitsu prefix (d dashboard, s search, t
     trending), bound only when `desktop-kitsu' is loaded;
-    `C-c a` - AI prefix (a chat, f attach file, h history toggle,
-    o open chat, r rename chat, l search, s save, g gptel-menu,
-    z Z-AI usage); `C-c l` - lexicon prefix (t
+    `C-c a` - AI prefix (a chat, d DSH container, f attach file,
+    h history toggle, o open chat, r rename chat, l search, s save,
+    g gptel-menu, z Z-AI usage); `C-c l` - lexicon prefix (t
     transform, p prompt, d download, s status, r remove-last), bound
     only when `desktop-lexicon' is loaded; `C-c o` - org prefix
     (a agenda, t todo list; `p` nested pomodoro prefix: p transient,
@@ -200,7 +200,9 @@ Always include `lexical-binding: t` at the top of every file.
     pomodoro sub-keys bound only when `desktop-pomodoro' is loaded.
   - Top level: ``C-c ` `` (treemacs sidebar), `C-c m` (sync menu),
     `C-c t` / `C-c T` (terminal), `C-c p` (music play/pause),
-    `C-c M-w` (copy image at point), `C-x x f` (apheleia format,
+    `C-c M-w` (copy image at point), `C-c d` (DSH container,
+    `my-dsh-open`, bound only when `desktop-dsh' is loaded),
+    `C-x x f` (apheleia format,
     bound by desktop-edit.el when `my-desktop-enable-apheleia').
   - `RET` in Dired opens video files (`my-desktop-video-extensions`)
     with `my-desktop-video-player` (default `mpv`), other files use

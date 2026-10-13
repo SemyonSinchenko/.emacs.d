@@ -58,6 +58,7 @@ Only populated when the pomodoro module is loaded.")
             ("C-c T" . my-term-project)
             ("C-c p" . my-media-toggle)
             ("C-c M-w" . my-clipboard-copy-image) ; copy image at point
+            ("C-c d" . my-dsh-open)             ; DSH container session
             ;; C-d: удалить выделение, иначе символ вперед.
             ;; `delete-char' (стандартная C-d) игнорирует region;
             ;; `delete-forward-char' работает как <delete>: с активным
@@ -77,6 +78,7 @@ Only populated when the pomodoro module is loaded.")
                ("s-t" . my-roguelike-story)
                ("s-c" . my-roguelike-chat))
     (ai ("a" . my-ai-chat)            ; open a new chat
+        ("d" . my-dsh-open)           ; DSH container session
         ("f" . my-ai-attach-file)     ; attach a file to this chat
         ("h" . my-ai-history-toggle)  ; toggle shared-history indexing
         ("r" . my-ai-session-rename)  ; rename chat (DB title only)
@@ -197,6 +199,8 @@ Only populated when the pomodoro module is loaded.")
      :if (lambda () (fboundp 'my-term-new)))
     ("a" "New AI chat" my-ai-chat
      :if (lambda () (fboundp 'my-ai-chat)))
+    ("D" "DSH container" my-dsh-open
+     :if (lambda () (fboundp 'my-dsh-open)))
     ("z" "Z-AI usage" my-ai-zai-usage
      :if (lambda () (fboundp 'my-ai-zai-usage)))
     ("l" "Lexicon transform" lexicon-org-transform
