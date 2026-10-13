@@ -69,11 +69,13 @@ Only bound when the kitsu module is loaded
                ("s-t" . my-roguelike-story)
                ("s-c" . my-roguelike-chat))
     (ai ("a" . my-ai-chat)            ; open a new chat
-        ("r" . my-ai-session-rename)  ; rename session file
+        ("f" . my-ai-attach-file)     ; attach a file to this chat
+        ("h" . my-ai-history-toggle)  ; toggle shared-history indexing
+        ("r" . my-ai-session-rename)  ; rename chat (DB title only)
         ("o" . my-ai-session-open)    ; resume by name
         ("g" . gptel-menu)            ; gptel settings menu
-        ("l" . my-ai-session-search)  ; search sessions
-        ("s" . my-ai-session-save)    ; save session now
+        ("l" . my-ai-session-search)  ; search transcripts (grep)
+        ("s" . my-ai-session-save)    ; save chat now
         ("z" . my-ai-zai-usage))      ; Z-AI coding plan usage
     (lexicon ("t" . lexicon-org-transform)        ; transform region
              ("p" . lexicon-org-transform-prompt) ; prompt for transform

@@ -3,10 +3,29 @@
 ;;; Commentary:
 ;; AnythingLLM replacement on top of gptel.  The assistant has exactly
 ;; these tools, nothing else (no shell, no arbitrary filesystem):
-;;   read_attachment - read a file from my-desktop-ai-attachments-dir
-;;   memory_save     - append a fact to the memory Org file
-;;   memory_search   - search the memory Org file
-;;   web_search      - SearXNG query (only when configured)
+;;   list_attachments - list files attached to THIS chat
+;;   read_attachment  - read a file from this chat's folder
+;;   memory_save      - store a durable fact (shared by all chats)
+;;   memory_search    - search stored facts
+;;   history_search   - search the user's opted-in past chats
+;;   history_read     - read an opted-in past chat
+;;   web_search       - SearXNG query (only when configured)
+;;   web_fetch        - read a web page
+;;
+;; State (session titles and config, attachments, memory, the history
+;; index) lives in one sqlite database, `my-desktop-ai-db-file'.
+;; Transcripts stay org files in `my-desktop-ai-sessions-dir' (gptel
+;; is file-based); they are indexed into the history only when the
+;; user opts a chat in (C-c a h).  Every chat owns a private
+;; attachments folder under `my-desktop-ai-attachments-dir' -- other
+;; chats' folders are unreachable by construction.  Attached documents
+;; are converted to clean markdown text with markitdown before they
+;; reach the model; the folder never stores raw containers.
+;;
+;; A chat is identified by a permanent random uuid: it names the org
+;; file and the attachments folder and never changes.  Renaming a
+;; chat (C-c a r) only updates the display title in the database.
+;;
 ;; Backends come from `my-desktop-ai-backends'; API keys ALWAYS come
 ;; from environment variables (:key-env), never from the config file.
 ;; :type is 'openai (default, any OpenAI-compatible API) or 'deepseek
@@ -15,10 +34,200 @@
 ;;; Code:
 
 (require 'json)
+(require 'mailcap)
 (require 'url)
 (require 'seq)
 (require 'desktop-config-defs)
 (require 'desktop-core)
+
+;; gptel internals used here (loaded with gptel at runtime).
+(declare-function gptel--file-binary-p "gptel-request")
+(declare-function gptel--model-capable-p "gptel-request")
+(declare-function gptel--model-mime-capable-p "gptel-request")
+(declare-function gptel-add-file "gptel-context")
+(declare-function gptel-backend-name "gptel")
+(declare-function gptel-tool-name "gptel")
+(defvar gptel-backend)
+(defvar gptel-context)
+(defvar gptel-directives)
+(defvar gptel-model)
+(defvar gptel--system-message)
+(defvar gptel-tools)
+(defvar gptel-use-tools)
+
+;; Per-chat state (buffer-local by design: gptel runs tool calls and
+;; builds requests with the chat buffer current, so these are in
+;; scope inside tools and copied into request construction).
+(defvar-local my-ai-session-file nil
+  "File this gptel buffer persists to.  Set at chat creation.")
+
+(defvar-local my-ai-session-id nil
+  "Row id of this chat in the chats database.")
+
+(defvar-local my-ai-session-uuid nil
+  "Permanent random identifier of this chat.  Names the transcript
+file and the attachments folder and never changes; renames only
+update the display title in the database.")
+
+(defvar-local my-ai-chat-dir nil
+  "This chat's private attachments folder.  Other chats' folders
+are unreachable: read_attachment resolves paths inside this
+directory only.")
+
+(defvar-local my-ai-in-history nil
+  "Whether this chat is indexed into the shared history.  Toggled
+with `my-ai-history-toggle'; mirrored in the session row.")
+
+;; ------------------------------------------------------------------
+;; State database: sessions, attachments, memory, history
+;; ------------------------------------------------------------------
+;; One sqlite file (my-desktop-ai-db-file) holds everything except
+;; the org transcripts: session titles and config, attachment
+;; records, agent memory and the opt-in full-text history index.
+;; FTS5 is used for history search, with LIKE over history_text as
+;; the conceptual fallback (FTS5 ships in every common build).
+
+(defvar my-ai--db nil
+  "Open connection to the chats database.")
+
+(defvar my-ai--backends nil
+  "Alist of (NAME . backend) built at startup, for session restore.")
+
+(defconst my-ai--db-ddl
+  '("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
+    "CREATE TABLE IF NOT EXISTS session (
+       id INTEGER PRIMARY KEY,
+       uuid TEXT NOT NULL UNIQUE,
+       title TEXT NOT NULL DEFAULT '',
+       file TEXT NOT NULL,
+       created_at TEXT NOT NULL,
+       updated_at TEXT,
+       backend TEXT,
+       model TEXT,
+       tools TEXT,
+       directive TEXT,
+       in_history INTEGER NOT NULL DEFAULT 0,
+       status TEXT NOT NULL DEFAULT 'active')"
+    "CREATE TABLE IF NOT EXISTS attachment (
+       id INTEGER PRIMARY KEY,
+       session_id INTEGER NOT NULL REFERENCES session(id) ON DELETE CASCADE,
+       orig_name TEXT NOT NULL,
+       stored_name TEXT NOT NULL,
+       kind TEXT NOT NULL,
+       chars INTEGER,
+       added_at TEXT NOT NULL,
+       UNIQUE (session_id, stored_name))"
+    "CREATE TABLE IF NOT EXISTS memory (
+       id INTEGER PRIMARY KEY,
+       content TEXT NOT NULL,
+       session_id INTEGER REFERENCES session(id) ON DELETE SET NULL,
+       created_at TEXT NOT NULL,
+       updated_at TEXT)"
+    "CREATE TABLE IF NOT EXISTS history_text (
+       session_id INTEGER PRIMARY KEY REFERENCES session(id) ON DELETE CASCADE,
+       body TEXT NOT NULL,
+       updated_at TEXT)"
+    "CREATE VIRTUAL TABLE IF NOT EXISTS history_fts USING fts5(body)"))
+
+(defun my-ai--db ()
+  "Return the open chats database, opening and initializing it."
+  (unless (sqlite-available-p)
+    (user-error "This Emacs has no sqlite support (required for AI chats)"))
+  (unless my-ai--db
+    (let ((file (expand-file-name my-desktop-ai-db-file)))
+      (make-directory (file-name-directory file) t)
+      (setq my-ai--db (sqlite-open file))
+      (sqlite-execute my-ai--db "PRAGMA foreign_keys=ON")
+      (dolist (ddl my-ai--db-ddl)
+        (sqlite-execute my-ai--db ddl))))
+  my-ai--db)
+
+(defun my-ai--db-execute (sql &rest args)
+  "Run SQL with ARGS against the chats database."
+  (sqlite-execute (my-ai--db) sql args))
+
+(defun my-ai--db-select (sql &rest args)
+  "Query the chats database with ARGS, return the rows."
+  (sqlite-select (my-ai--db) sql args))
+
+(defun my-ai--now ()
+  "Local ISO-8601 timestamp."
+  (format-time-string "%Y-%m-%dT%H:%M:%S"))
+
+(defun my-ai--fts-query (query)
+  "Turn QUERY into a safe FTS5 MATCH expression: terms are
+double-quoted (punctuation stays literal) and ANDed."
+  (string-join
+   (mapcar (lambda (word)
+             (concat "\"" (string-replace "\"" "\"\"" word) "\""))
+           (split-string query "[[:space:]]+" t))
+   " "))
+
+(defun my-ai--session-create (uuid file)
+  "Insert a session row for UUID and FILE; return its database id."
+  (my-ai--db-execute
+   "INSERT INTO session (uuid, title, file, created_at, in_history)
+    VALUES (?, '', ?, ?, ?)"
+   uuid file (my-ai--now)
+   (if my-desktop-ai-history-default 1 0))
+  (caar (my-ai--db-select "SELECT id FROM session WHERE uuid = ?" uuid)))
+
+(defun my-ai--attachment-upsert (orig stored kind chars)
+  "Record an attachment of the current chat; same stored name
+overwrites the previous record."
+  (my-ai--db-execute
+   "INSERT INTO attachment
+      (session_id, orig_name, stored_name, kind, chars, added_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(session_id, stored_name) DO UPDATE SET
+      orig_name = excluded.orig_name, kind = excluded.kind,
+      chars = excluded.chars, added_at = excluded.added_at"
+   my-ai-session-id orig stored kind chars (my-ai--now)))
+
+(defun my-ai--history-sync ()
+  "Mirror the current chat into (or out of) the history index."
+  (when my-ai-session-id
+    (if my-ai-in-history
+        (let ((body (my-ai--org-plain-text)))
+          (my-ai--db-execute
+           "INSERT INTO history_text (session_id, body, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(session_id) DO UPDATE SET
+              body = excluded.body, updated_at = excluded.updated_at"
+           my-ai-session-id body (my-ai--now))
+          (my-ai--db-execute "DELETE FROM history_fts WHERE rowid = ?"
+                             my-ai-session-id)
+          (my-ai--db-execute
+           "INSERT INTO history_fts (rowid, body) VALUES (?, ?)"
+           my-ai-session-id body))
+      (my-ai--db-execute "DELETE FROM history_fts WHERE rowid = ?"
+                         my-ai-session-id)
+      (my-ai--db-execute "DELETE FROM history_text WHERE session_id = ?"
+                         my-ai-session-id))))
+
+(defun my-ai--org-plain-text ()
+  "Return a plain-text projection of the current org transcript.
+Drops property drawers, \"#+\" lines and heading stars; good
+enough for full-text search."
+  (let ((in-drawer nil) lines)
+    (save-restriction
+      (widen)
+      (dolist (line (split-string
+                     (buffer-substring-no-properties
+                      (point-min) (point-max))
+                     "\n" t))
+        (cond
+         ((string-match-p "^[ \t]*:PROPERTIES:" line)
+          (setq in-drawer t))
+         ((and in-drawer (string-match-p "^[ \t]*:END:" line))
+          (setq in-drawer nil))
+         (in-drawer)
+         ((string-prefix-p "#+" line))
+         (t (push (if (string-match "^\*+ " line)
+                      (substring line (match-end 0))
+                    line)
+                  lines)))))
+    (string-join (nreverse lines) "\n")))
 
 ;; ------------------------------------------------------------------
 ;; Tools (the allowlist IS the sandbox)
@@ -79,21 +288,144 @@ search.formats in SearXNG settings.yml and restart it.")
     (error (format "ERROR: %s" (error-message-string err)))))
 
 (defun my-ai--read-attachment (path)
-  "Read PATH from the attachments directory, with guards."
-  (let* ((dir (expand-file-name my-desktop-ai-attachments-dir))
-         (file (expand-file-name path)))
+  "Read PATH from the current chat's attachments folder.
+gptel runs tool calls with the chat buffer current, so the
+buffer-local folder is in scope.  Binary files are refused: the
+folder stores clean text and images only."
+  (let ((dir my-ai-chat-dir))
     (cond
-     ((not (file-in-directory-p file dir))
-      (format "ERROR: file must be inside %s" dir))
-     ((not (file-readable-p file))
-      (format "ERROR: cannot read %s" file))
-     ((> (nth 7 (file-attributes file))
-         my-desktop-ai-attachment-max-size)
-      "ERROR: file too large")
+     ((not (and dir (file-directory-p dir)))
+      "ERROR: this chat has no attachments folder yet")
      (t
-      (with-temp-buffer
-        (insert-file-contents file)
-        (buffer-string))))))
+      (let ((file (expand-file-name path dir)))
+        (cond
+         ((not (file-in-directory-p file dir))
+          "ERROR: path escapes this chat's folder")
+         ((not (file-readable-p file))
+          (format "ERROR: no file %s (see list_attachments)" path))
+         ((file-directory-p file)
+          "ERROR: not a regular file")
+         ((> (nth 7 (file-attributes file))
+             my-desktop-ai-attachment-max-size)
+          "ERROR: file too large")
+         ((gptel--file-binary-p file)
+          (let ((md (concat (file-name-sans-extension file) ".md")))
+            (if (file-exists-p md)
+                (format "ERROR: %s is binary -- read %s instead"
+                        path (file-name-nondirectory md))
+              "ERROR: binary file -- the folder stores clean text
+and images only; ask the user to attach a text version")))
+         (t
+          (with-temp-buffer
+            (insert-file-contents file)
+            (buffer-string)))))))))
+
+(defun my-ai--list-attachments ()
+  "List the files attached to the current chat."
+  (if (not my-ai-session-id)
+      "ERROR: not in a chat buffer"
+    (let ((rows (my-ai--db-select
+                 "SELECT orig_name, stored_name, kind, chars, added_at
+                  FROM attachment WHERE session_id = ? ORDER BY id"
+                 my-ai-session-id)))
+      (if (not rows)
+          "No attachments in this chat yet."
+        (string-join
+         (mapcar
+          (lambda (row)
+            (pcase-let ((`(,orig ,stored ,kind ,chars ,added) row))
+              (format "%s <- %s (%s%s, added %s)"
+                      stored orig kind
+                      (if chars (format ", %d chars" chars) "")
+                      (or added "?"))))
+          rows)
+         "\n")))))
+
+(defun my-ai--history-search (query)
+  "Search opted-in past chats for QUERY: session ids, titles,
+snippets, attachment names and transcript paths.  The current
+chat is excluded.  Links are informational for the user: other
+chats' files are not readable."
+  (let ((match (my-ai--fts-query query)))
+    (if (string-empty-p match)
+        "ERROR: empty query"
+      (condition-case err
+          (let ((rows (my-ai--db-select
+                       "SELECT s.id, s.title, s.uuid,
+                               substr(s.updated_at, 1, 10),
+                               snippet(history_fts, 0, '[', ']',
+                                       ' ... ', 20)
+                        FROM history_fts JOIN session s
+                          ON s.id = history_fts.rowid
+                        WHERE history_fts MATCH ? AND s.id != ?
+                        ORDER BY rank LIMIT 5"
+                       match (or my-ai-session-id -1))))
+            (if (not rows)
+                "No history matches."
+              (string-join
+               (mapcar
+                (lambda (row)
+                  (pcase-let ((`(,id ,title ,uuid ,day ,snippet) row))
+                    (let ((atts (my-ai--db-select
+                                 "SELECT stored_name FROM attachment
+                                  WHERE session_id = ?" id))
+                          (file (caar (my-ai--db-select
+                                       "SELECT file FROM session
+                                        WHERE id = ?" id))))
+                      (concat
+                       (format "[%d] %s (%s): %s"
+                               id
+                               (if (string-empty-p title) uuid title)
+                               (or day "?")
+                               (string-trim
+                                (replace-regexp-in-string
+                                 "\n" " " (or snippet ""))))
+                       (if atts
+                           (format "\nfiles: %s"
+                                   (string-join
+                                    (mapcar #'car atts) ", "))
+                         "")
+                       (format "\ntranscript: %s" (or file "?"))))))
+                rows)
+               "\n\n")))
+        (error (format "ERROR: %s" (error-message-string err)))))))
+
+(defun my-ai--history-read (session-id &optional offset)
+  "Read the indexed transcript of SESSION-ID (from
+history_search) in chunks of `my-desktop-ai-fetch-limit'
+characters; OFFSET continues a previous chunk."
+  (condition-case err
+      (let* ((id (if (stringp session-id)
+                     (string-to-number session-id)
+                   session-id))
+             (row (car (my-ai--db-select
+                        "SELECT s.title, s.uuid, h.body
+                         FROM history_text h JOIN session s
+                           ON s.id = h.session_id
+                         WHERE h.session_id = ?" id)))
+             (offset (max 0 (or offset 0)))
+             (limit (or my-desktop-ai-fetch-limit 10000)))
+        (cond
+         ((not row)
+          (format "ERROR: session %s is not indexed (only opted-in
+chats are readable; use history_search)" id))
+         (t
+          (pcase-let ((`(,title ,uuid ,body) row))
+            (if (>= offset (length body))
+                (format "ERROR: offset %d is beyond the transcript
+(%d characters)" offset (length body))
+              (let* ((end (min (+ offset limit) (length body)))
+                     (more-p (< end (length body))))
+                (concat
+                 (format "[history %s: showing %d-%d of %d characters%s]\n"
+                         (if (string-empty-p title) uuid title)
+                         offset end (length body)
+                         (if more-p
+                             (format " -- to continue, call again
+with offset %d" end)
+                           " -- end of transcript"))
+                 (substring body offset end))))))))
+    (error (format "ERROR: %s" (error-message-string err)))))
 
 (defvar my-ai--fetch-cache nil
   "Per-session cache of (URL . EXTRACTED-TEXT) for web_fetch.")
@@ -207,36 +539,22 @@ offset %d" end)
     (error (format "ERROR: %s" (error-message-string err)))))
 
 (defun my-ai--memory-save (text)
-  "Append TEXT to the memory Org file."
-  (let ((file (expand-file-name my-desktop-ai-memory-file)))
-    (make-directory (file-name-directory file) t)
-    (with-temp-buffer
-      (goto-char (point-max))
-      (insert (format "* [%s] %s\n"
-                      (format-time-string "%Y-%m-%d %a")
-                      text))
-      (write-region (point-min) (point-max) file 'append))
-    "Saved to memory."))
+  "Store TEXT as a durable fact in the memory table, tagged with
+the current chat for provenance."
+  (my-ai--db-execute
+   "INSERT INTO memory (content, session_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?)"
+   text my-ai-session-id (my-ai--now) (my-ai--now))
+  "Saved to memory.")
 
 (defun my-ai--memory-search (query)
-  "Return memory lines containing QUERY."
-  (let* ((file (expand-file-name my-desktop-ai-memory-file))
-         (matches
-          (when (file-exists-p file)
-            (with-temp-buffer
-              (insert-file-contents file)
-              (let ((case-fold-search t) out)
-                (goto-char (point-min))
-                (while (re-search-forward
-                        (regexp-quote query) nil t)
-                  (forward-line 0)
-                  (push (buffer-substring (line-beginning-position)
-                                          (line-end-position))
-                        out)
-                  (forward-line 1))
-                (nreverse out))))))
-    (if matches
-        (string-join matches "\n")
+  "Return memory entries containing QUERY."
+  (let ((rows (my-ai--db-select
+               "SELECT content FROM memory WHERE content LIKE ?
+                ORDER BY id"
+               (concat "%" query "%"))))
+    (if rows
+        (string-join (mapcar #'car rows) "\n")
       "No memory entries match.")))
 
 ;; ------------------------------------------------------------------
@@ -270,12 +588,23 @@ from the KEY-ENV environment variable at request time."
 ;; Sessions: org files, auto-saved after each response, resumable
 ;; ------------------------------------------------------------------
 
-(defvar-local my-ai-session-file nil
-  "File this gptel buffer persists to.  Set on first save.")
-
 (defun my-ai--sessions-dir ()
   "Session directory, expanded."
   (expand-file-name my-desktop-ai-sessions-dir))
+
+(defun my-ai--attachments-root ()
+  "Parent directory of per-chat attachment folders, expanded."
+  (expand-file-name my-desktop-ai-attachments-dir))
+
+(defun my-ai--chat-dir ()
+  "Create (if needed) and return this chat's attachments folder."
+  (unless my-ai-chat-dir
+    (setq my-ai-chat-dir
+          (expand-file-name (or my-ai-session-uuid
+                                (my-ai--session-uuid))
+                            (my-ai--attachments-root))))
+  (make-directory my-ai-chat-dir t)
+  my-ai-chat-dir)
 
 (defun my-ai--session-uuid ()
   "Return a short random hex identifier for a session file."
@@ -284,75 +613,124 @@ from the KEY-ENV environment variable at request time."
 (defun my-ai-session-save ()
   "Save the current gptel buffer to its session file."
   (interactive)
-  (unless (derived-mode-p 'org-mode)
-    (user-error "Save AI sessions from their org-mode chat buffers"))
-  (unless my-ai-session-file
-    (setq my-ai-session-file
-          (expand-file-name
-           (concat (format-time-string "%Y-%m-%dT%H-%M-%S")
-                   "-" (my-ai--session-uuid) ".org")
-           (my-ai--sessions-dir))))
+  (unless (and (derived-mode-p 'org-mode) my-ai-session-file)
+    (user-error "Save AI chats from their chat buffers"))
   (make-directory (file-name-directory my-ai-session-file) t)
   (write-region (point-min) (point-max) my-ai-session-file nil 'silent)
-  (message "[desktop] AI session saved: %s"
+  (message "[desktop] AI chat saved: %s"
            (file-name-nondirectory my-ai-session-file)))
 
+(defun my-ai--session-sync ()
+  "Update the database row and the history index of the current
+chat: backend, model, active tools and system message are
+snapshotted so `my-ai-session-open' can restore them."
+  (let* ((backend (bound-and-true-p gptel-backend))
+         (model (bound-and-true-p gptel-model))
+         (message (bound-and-true-p gptel--system-message))
+         (tools (mapcar #'gptel-tool-name
+                        (or (bound-and-true-p gptel-tools)
+                            (default-value 'gptel-tools)))))
+    (my-ai--db-execute
+     "UPDATE session SET updated_at = ?, backend = ?, model = ?,
+       tools = ?, directive = ? WHERE id = ?"
+     (my-ai--now)
+     (and backend (gptel-backend-name backend))
+     (and model (symbol-name (if (consp model) (car model) model)))
+     (json-encode tools)
+     message
+     my-ai-session-id)
+    (my-ai--history-sync)))
+
 (defun my-ai--session-autosave (&optional _beg _end)
-  "Auto-save the gptel buffer after each response."
-  (when (and my-desktop-ai-sessions-dir
+  "Auto-save the gptel buffer and sync its database row after
+each response."
+  (when (and my-ai-session-id
              (derived-mode-p 'org-mode)
              (bound-and-true-p gptel-mode))
-    (ignore-errors (my-ai-session-save))))
+    (ignore-errors
+      (my-ai-session-save)
+      (my-ai--session-sync))))
 
 (add-hook 'gptel-post-response-functions #'my-ai--session-autosave)
 
 (defun my-ai-session-rename (name)
-  "Rename the current buffer's AI session file to NAME.org.
-New replies keep auto-saving to the renamed file."
+  "Rename the current AI chat to NAME.
+Only the display title in the database changes; the transcript
+file and the attachments folder keep their permanent names."
   (interactive
-   (list (read-string "Rename AI session to: "
-                      (when my-ai-session-file
-                        (file-name-base my-ai-session-file)))))
-  (unless my-ai-session-file
-    (user-error "No session file yet: save it first (C-c a s)"))
-  (let* ((name (string-trim (file-name-sans-extension name)))
-         (new-file (expand-file-name (concat name ".org")
-                                     (my-ai--sessions-dir))))
-    (when (string-empty-p name)
-      (user-error "Empty session name"))
-    (when (and (file-exists-p new-file)
-               (not (yes-or-no-p (format "%s exists; overwrite? "
-                                         new-file))))
-      (user-error "Canceled"))
-    (make-directory (file-name-directory new-file) t)
-    (if (buffer-file-name)
-        ;; Buffer visits the session file (resumed session).
-        (progn
-          (rename-file (buffer-file-name) new-file t)
-          (set-visited-file-name new-file t t)
-          (set-buffer-modified-p nil))
-      ;; Transient chat buffer: move the file, keep writing to it.
-      (when (file-exists-p my-ai-session-file)
-        (rename-file my-ai-session-file new-file t))
-      (setq my-ai-session-file new-file))
-    (message "[desktop] AI session renamed: %s"
-             (file-name-nondirectory new-file))))
+   (list (read-string "Rename AI chat to: "
+                      (when my-ai-session-uuid
+                        my-ai-session-uuid))))
+  (unless my-ai-session-id
+    (user-error "Not in an AI chat buffer"))
+  (let ((title (string-trim name)))
+    (when (string-empty-p title)
+      (user-error "Empty chat name"))
+    (my-ai--db-execute "UPDATE session SET title = ? WHERE id = ?"
+                       title my-ai-session-id)
+    (rename-buffer (format "*AI: %s*" title) t)
+    (message "[desktop] AI chat renamed: %s" title)))
 
 (defun my-ai-session-open ()
-  "Resume a saved AI session by name."
+  "Resume a saved AI chat by name.
+Restores the session's backend, model, tools and system message
+from the database, and reconnects it to its attachments folder."
   (interactive)
-  (let* ((files (directory-files (my-ai--sessions-dir) t "\\.org\\'"))
-         (names (mapcar #'file-name-base files)))
-    (unless files
-      (user-error "No saved AI sessions in %s" (my-ai--sessions-dir)))
-    (let* ((name (completing-read "Resume AI session: " names nil t))
-           (file (seq-find (lambda (f)
-                             (equal (file-name-base f) name))
-                           files)))
-      (find-file file)
-      (gptel-mode 1)
-      (setq my-ai-session-file (expand-file-name file))
-      (message "[desktop] AI session resumed (new replies auto-save)"))))
+  (require 'gptel)
+  (let* ((rows (my-ai--db-select
+                "SELECT id, uuid, title, file, backend, model, tools,
+                        directive, in_history, updated_at
+                 FROM session WHERE status = 'active'
+                 ORDER BY COALESCE(updated_at, created_at) DESC"))
+         (labels
+          (mapcar
+           (lambda (row)
+             (pcase-let ((`(,_id ,uuid ,title ,_file ,_backend ,_model
+                                 ,_tools ,_directive ,_hist ,updated) row))
+               (cons (format "%s  [%s]"
+                             (if (string-empty-p title) uuid title)
+                             (or (and updated (substring updated 0 10))
+                                 "?"))
+                     row)))
+           rows)))
+    (unless rows
+      (user-error "No AI chats yet (C-c a a starts one)"))
+    (let* ((label (completing-read "Resume AI chat: "
+                                   (mapcar #'car labels) nil t))
+           (row (cdr (assoc label labels))))
+      (pcase-let ((`(,id ,uuid ,title ,file ,backend-name ,model
+                           ,tools-json ,directive ,in-history ,_upd) row))
+        (find-file file)
+        (gptel-mode 1)
+        (setq my-ai-session-id id
+              my-ai-session-uuid uuid
+              my-ai-session-file (expand-file-name file)
+              my-ai-chat-dir (expand-file-name uuid
+                                               (my-ai--attachments-root))
+              my-ai-in-history (= in-history 1))
+        (setq-local gptel-context nil)
+        (when-let* ((backend (and backend-name
+                                  (cdr (assoc backend-name
+                                              my-ai--backends)))))
+          (setq-local gptel-backend backend))
+        (when model
+          (setq-local gptel-model (intern model)))
+        (when (and tools-json (not (string-empty-p tools-json)))
+          (let ((names (json-parse-string tools-json
+                                          :array-type 'list)))
+            (setq-local gptel-use-tools t)
+            (setq-local gptel-tools
+                        (seq-filter
+                         (lambda (tool)
+                           (member (gptel-tool-name tool) names))
+                         (default-value 'gptel-tools)))))
+        (when (and directive (not (string-empty-p directive)))
+          (setq-local gptel--system-message directive))
+        (rename-buffer (format "*AI: %s*"
+                               (if (string-empty-p title) uuid title))
+                       t)
+        (message "[desktop] AI chat resumed (history: %s)"
+                 (if my-ai-in-history "on" "off"))))))
 
 (defun my-ai-session-search (query)
   "Search all saved AI sessions for QUERY (grep)."
@@ -365,6 +743,116 @@ New replies keep auto-saving to the renamed file."
                          "*.org")))))
 
 ;; ------------------------------------------------------------------
+;; Attachments: pick a file, convert to clean text, add to context
+;; ------------------------------------------------------------------
+
+(defun my-ai--markitdown ()
+  "Locate the markitdown executable, or nil."
+  (or (executable-find my-desktop-ai-markitdown)
+      (let ((p (expand-file-name
+                (concat "~/.local/bin/" my-desktop-ai-markitdown))))
+        (and (file-executable-p p) p))))
+
+(defun my-ai--convert-to-text (file out)
+  "Convert FILE to markdown text with markitdown and write OUT.
+Return the character count."
+  (let ((bin (my-ai--markitdown))
+        (outbuf (generate-new-buffer " *markitdown out*"))
+        (errbuf (generate-new-buffer " *markitdown err*"))
+        text)
+    (unless bin
+      (user-error "markitdown not found -- install it with: \
+uv tool install \"markitdown[all]\""))
+    (unwind-protect
+        (progn
+          (call-process bin nil (list outbuf errbuf) nil file)
+          (with-current-buffer outbuf
+            (setq text (string-trim (buffer-string)))))
+      (kill-buffer outbuf)
+      (kill-buffer errbuf))
+    (when (string-empty-p text)
+      (user-error "markitdown produced no text for %s" file))
+    (when (> (length text) my-desktop-ai-attachment-max-size)
+      (user-error "Converted text of %s is too large (%d characters)"
+                  file (length text)))
+    (write-region text nil out nil 'silent)
+    (length text)))
+
+(defun my-ai-attach-file (file)
+  "Attach FILE to the current AI chat.
+Plain text files are copied into this chat's folder as-is;
+binary documents (pdf, docx, xlsx, ...) are converted to clean
+markdown text with markitdown -- raw containers are never stored;
+images are attached as media when the model can see them.  The
+stored file is added to gptel context, so its content is sent
+with every message.  Attaching a file under an existing name
+overwrites the previous copy."
+  (interactive
+   (list (read-file-name "Attach file to chat: " nil nil t)))
+  (unless my-ai-session-id
+    (user-error "Not in an AI chat buffer (C-c a a or C-c a o)"))
+  (setq file (expand-file-name file))
+  (cond
+   ((not (file-readable-p file))
+    (user-error "Cannot read %s" file))
+   ((file-directory-p file)
+    (user-error "%s is a directory" file))
+   ((> (nth 7 (file-attributes file))
+       my-desktop-ai-attachment-max-size)
+    (user-error "%s is larger than my-desktop-ai-attachment-max-size"
+                file)))
+  (let* ((dir (my-ai--chat-dir))
+         (mime (mailcap-file-name-to-mime-type file))
+         (image-p (string-prefix-p "image/" mime))
+         (binary-p (gptel--file-binary-p file))
+         (orig (file-name-nondirectory file))
+         stored kind chars)
+    (cond
+     ;; Images: attach raw as media (needs a vision-capable model).
+     ((and image-p binary-p)
+      (unless (and (gptel--model-capable-p 'media)
+                   (gptel--model-mime-capable-p mime))
+        (user-error "Model cannot see images (%s)" mime))
+      (setq stored (expand-file-name orig dir) kind "media")
+      (copy-file file stored t))
+     ;; Binary documents: markitdown -> clean markdown, original dropped.
+     (binary-p
+      (setq stored (expand-file-name
+                    (concat (file-name-sans-extension orig) ".md")
+                    dir)
+            kind "text")
+      (setq chars (my-ai--convert-to-text file stored)))
+     ;; Plain text: store as-is.
+     (t
+      (setq stored (expand-file-name orig dir) kind "text")
+      (copy-file file stored t)
+      (setq chars (with-temp-buffer
+                    (insert-file-contents stored)
+                    (length (buffer-string))))))
+    (my-ai--attachment-upsert orig (file-name-nondirectory stored)
+                              kind chars)
+    (gptel-add-file stored)
+    (message "[desktop] AI attached %s -> %s%s"
+             orig (file-name-nondirectory stored)
+             (if chars (format " (%d chars)" chars) ""))))
+
+(defun my-ai-history-toggle ()
+  "Toggle whether the current chat is indexed into shared history.
+Indexed transcripts are searchable from any chat with
+history_search / history_read; toggling off removes the chat from
+the index."
+  (interactive)
+  (unless my-ai-session-id
+    (user-error "Not in an AI chat buffer"))
+  (setq my-ai-in-history (not my-ai-in-history))
+  (my-ai--db-execute "UPDATE session SET in_history = ? WHERE id = ?"
+                     (if my-ai-in-history 1 0)
+                     my-ai-session-id)
+  (my-ai--history-sync)
+  (message "[desktop] AI history: %s"
+           (if my-ai-in-history "ON" "OFF")))
+
+;; ------------------------------------------------------------------
 ;; gptel wiring
 ;; ------------------------------------------------------------------
 
@@ -372,10 +860,13 @@ New replies keep auto-saving to the renamed file."
   :ensure t
   :commands (gptel gptel-send gptel-menu)
   :config
-  ;; Attachment sandbox directory.
+  ;; Attachment sandbox root (per-chat folders live below it).
   (condition-case nil
       (make-directory my-desktop-ai-attachments-dir t)
     (error nil))
+  (unless (sqlite-available-p)
+    (my-desktop--warn
+     "AI: Emacs lacks sqlite support -- chats, memory and history are disabled"))
 
   ;; Backends: the first spec with a present API key wins.
   (let (first-backend first-model)
@@ -400,6 +891,8 @@ New replies keep auto-saving to the renamed file."
               (let ((backend (my-ai--make-backend
                               name type host endpoint key-env
                               models stream)))
+                (when backend
+                  (push (cons name backend) my-ai--backends))
                 (unless first-backend
                   (setq first-backend backend
                         first-model
@@ -428,16 +921,29 @@ New replies keep auto-saving to the renamed file."
            :function #'my-ai--read-attachment
            :name "read_attachment"
            :description
-           "Read a text file from the attachments directory. \
-The user must place files there first."
+           "Read a text file attached to THIS chat.  Only the files
+of the current chat's attachments folder exist for you; other
+chats' files are unreachable.  Use list_attachments to see what
+is available."
            :args (list '(:name "path" :type string
                                :description
-                               "path relative to the attachments dir"))
+                               "file name in this chat's folder"))
+           :category "desktop")
+          (gptel-make-tool
+           :function #'my-ai--list-attachments
+           :name "list_attachments"
+           :description
+           "List the files attached to THIS chat: stored name,
+original name, kind (text or media), size and time added."
+           :args nil
            :category "desktop")
           (gptel-make-tool
            :function #'my-ai--memory-save
            :name "memory_save"
-           :description "Save a fact or preference to long-term memory."
+           :description
+           "Save a durable fact or preference to long-term memory,
+shared across all chats.  Use it for distilled facts like 'user
+prefers X' or 'never mention Y' -- not for chit-chat."
            :args (list '(:name "text" :type string
                                :description "the fact to remember"))
            :category "desktop")
@@ -445,28 +951,59 @@ The user must place files there first."
            :function #'my-ai--memory-search
            :name "memory_search"
            :description
-           "Search long-term memory for entries containing the query."
+           "Search long-term memory for stored facts containing the
+query.  Check it whenever a user preference or a past decision
+might matter."
            :args (list '(:name "query" :type string
                                :description "text to search for"))
            :category "desktop")
-         ;; Fetch a known URL: readable main content, paged.
-         (gptel-make-tool
-          :function #'my-ai--web-fetch
-          :name "web_fetch"
-          :description
-          "Fetch a web page by exact URL and return its readable \
+          (gptel-make-tool
+           :function #'my-ai--history-search
+           :name "history_search"
+           :description
+           "Search the user's opted-in past chats (shared history)
+and return session ids, titles, dates, matching snippets,
+attached file names and transcript paths.  Use it when the user
+refers to earlier conversations or when prior context may exist.
+Links are informational: other chats' files cannot be read, only
+their indexed transcript text (via history_read)."
+           :args (list '(:name "query" :type string
+                               :description "text to search for"))
+           :category "history")
+          (gptel-make-tool
+           :function #'my-ai--history-read
+           :name "history_read"
+           :description
+           "Read the indexed transcript of a past chat by its
+session id (from history_search).  Long transcripts are returned
+in chunks: when the result says 'to continue, call again with
+offset N', call this tool again with the same session id and
+:offset N to read the next part."
+           :args (list '(:name "session-id" :type integer
+                               :description
+                               "session id from history_search")
+                       '(:name "offset" :type integer :optional t
+                               :description "character offset to \
+continue reading a previously opened transcript"))
+           :category "history")
+          ;; Fetch a known URL: readable main content, paged.
+          (gptel-make-tool
+           :function #'my-ai--web-fetch
+           :name "web_fetch"
+           :description
+           "Fetch a web page by exact URL and return its readable \
 main text (extracted with trafilatura).  ALWAYS use this when a \
 URL is known (given by the user or found via web_search); use \
 web_search only to discover URLs.  Long pages are returned in \
 chunks of ~10k characters: when the result says 'to continue, \
 call again with offset N', call this tool again with the same \
 URL and :offset N to read the next part."
-          :args (list '(:name "url" :type string
-                              :description "http(s) URL to fetch")
-                      '(:name "offset" :type integer :optional t
-                              :description "character offset to \
+           :args (list '(:name "url" :type string
+                               :description "http(s) URL to fetch")
+                       '(:name "offset" :type integer :optional t
+                               :description "character offset to \
 continue reading a previously fetched page"))
-          :category "web"))
+           :category "web"))
          (when (and (eq my-desktop-ai-search 'searxng)
                     my-desktop-ai-searxng-url)
            (list
@@ -478,6 +1015,11 @@ continue reading a previously fetched page"))
              :args (list '(:name "query" :type string
                                  :description "search query"))
              :category "web"))))))
+
+  ;; "Attach chat file" next to gptel's own context commands.
+  (with-eval-after-load 'gptel-transient
+    (transient-append-suffix 'gptel-menu 'gptel--infix-context-add-file
+      '("A" "Attach chat file" my-ai-attach-file)))
 
 (defun my-ai-chat ()
   "Open a new gptel chat buffer.
@@ -510,14 +1052,25 @@ alone.  Resume saved sessions with `my-ai-session-open'."
         "from a terminal"))))
   ;; A unique buffer name per invocation: C-c a a always starts a
   ;; fresh concurrent chat instead of switching to an existing one.
-  ;; Resume saved sessions with `my-ai-session-open' (C-c a o).
+  ;; Resume saved chats with `my-ai-session-open' (C-c a o).
   ;; interactivep t makes gptel display the new buffer.  (A bare
   ;; (gptel) would pass no buffer name and do nothing.)
-  (gptel (generate-new-buffer-name
-          (format "*gptel-%s %s*"
-                  (gptel-backend-name gptel-backend)
-                  (format-time-string "%Y-%m-%d %H:%M")))
-         nil nil t))
+  (let* ((uuid (my-ai--session-uuid))
+         (file (expand-file-name (concat uuid ".org")
+                                 (my-ai--sessions-dir)))
+         (buf (gptel (generate-new-buffer-name
+                      (format "*gptel-%s %s*"
+                              (gptel-backend-name gptel-backend)
+                              (format-time-string "%Y-%m-%d %H:%M")))
+                     nil nil t)))
+    (with-current-buffer buf
+      (setq my-ai-session-file file
+            my-ai-session-uuid uuid
+            my-ai-session-id (my-ai--session-create uuid file)
+            my-ai-in-history my-desktop-ai-history-default)
+      ;; Context (attached files) is per chat, never global.
+      (setq-local gptel-context nil))
+    buf))
 
 ;; ------------------------------------------------------------------
 ;; Z-AI coding plan usage dashboard (C-c a z)

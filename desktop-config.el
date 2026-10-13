@@ -182,10 +182,21 @@
           :models (deepseek-flash)  ; first = default
           :stream t)
         ))
-(setq my-desktop-ai-directives
-      '(("default" . "You are a concise, helpful assistant.")))
+;; Personas: the default ("default") lives in the schema
+;; (modules/desktop-config-defs.el) and already describes the
+;; assistant's tools (memory, history, files) aggressively.
+;; Override here only to change or add personas.
+
 (setq my-desktop-ai-search 'searxng)
 (setq my-desktop-ai-searxng-url "http://localhost:7331/search")
+
+;; Per-chat attachments and sqlite-backed state: every chat gets a
+;; private folder under ai-attachments/ and a row in ai-chats.db.
+;; Attach with C-c a f; toggle shared-history indexing with C-c a h.
+(setq my-desktop-ai-db-file
+      (expand-file-name "ai-chats.db" user-emacs-directory))
+(setq my-desktop-ai-markitdown "markitdown") ; uv tool install "markitdown[all]"
+(setq my-desktop-ai-history-default nil)     ; opt in per chat
 
 ;; Z-AI coding plan usage dashboard (C-c a z); key comes from the
 ;; environment variable named below:

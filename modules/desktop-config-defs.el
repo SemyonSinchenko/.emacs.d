@@ -52,15 +52,33 @@ Nil disables the agenda widget on the Home tab."
 
 (defcustom my-desktop-ai-attachments-dir
   (expand-file-name "ai-attachments" user-emacs-directory)
-  "Directory the AI assistant is allowed to read files from.
-Copy (or save) files here before asking the assistant about them."
+  "Parent directory of per-chat attachment folders.
+Each chat gets its own subfolder (named after the session id);
+the assistant can only read files in the current chat's folder."
   :type 'directory
   :group 'my-desktop)
 
-(defcustom my-desktop-ai-memory-file
-  (expand-file-name "ai-memory.org" user-emacs-directory)
-  "Org file used as the AI assistant long-term memory."
+(defcustom my-desktop-ai-db-file
+  (expand-file-name "ai-chats.db" user-emacs-directory)
+  "SQLite database holding the assistant's state: session titles
+and config, attachments, agent memory and the opt-in full-text
+history index.  Requires Emacs built with sqlite support."
   :type 'file
+  :group 'my-desktop)
+
+(defcustom my-desktop-ai-markitdown "markitdown"
+  "markitdown executable used to convert attached documents
+(pdf, docx, xlsx, pptx, ...) to clean markdown text.  Looked up
+on PATH, then in ~/.local/bin.  Install with:
+uv tool install \"markitdown[all]\""
+  :type 'string
+  :group 'my-desktop)
+
+(defcustom my-desktop-ai-history-default nil
+  "Whether new AI chats are indexed into the shared history.
+The assistant can search the transcripts of opted-in chats from
+any chat.  Toggle per chat with `my-ai-history-toggle'."
+  :type 'boolean
   :group 'my-desktop)
 
 (defcustom my-desktop-reading-log-file nil
@@ -524,7 +542,24 @@ Examples:
   :group 'my-desktop)
 
 (defcustom my-desktop-ai-directives
-  '(("default" . "You are a concise, helpful assistant."))
+  '(("default" .
+     "You are the user's desktop assistant with persistent state across chats.
+
+- MEMORY: distilled, durable notes (\"user prefers X\", \"never
+  mention Y\").  Check memory_search whenever a user preference or a
+  past decision might matter; save durable facts with memory_save.
+  Do not save chit-chat.
+- HISTORY: raw past conversations the user opted in.  When the user
+  refers to earlier discussions (\"as we discussed\", \"that pdf last
+  week\"), use history_search, then history_read for details.  Links
+  returned there point into other chats: cite them to the user; you
+  cannot open other chats' files.
+- FILES: this chat has a private attachments folder; it is the only
+  filesystem you have.  list_attachments enumerates it,
+  read_attachment reads from it.
+
+Memory is distilled, history is raw.  Unsure?  memory_search first,
+then history_search."))
   "Alist of personas: NAME . SYSTEM-PROMPT."
   :type '(alist :key-type string :value-type string)
   :group 'my-desktop)
@@ -550,8 +585,8 @@ files.  Sessions are saved automatically after every response."
   :group 'my-desktop)
 
 (defcustom my-desktop-ai-fetch-limit 10000
-  "Characters per web_fetch call.  Long pages are paged: the
-tool result states the offset to continue from."
+  "Characters per paged tool read (web_fetch, history_read).
+The tool result states the offset to continue from."
   :type 'natnum
   :group 'my-desktop)
 
