@@ -25,7 +25,7 @@
 
 (setq my-desktop-org-dir "~/Org")
 (setq my-desktop-org-roam-dir "~/Org/org-roam/org-files/")
-(setq my-desktop-org-agenda-files '("~/Org/tasks.org"))
+(setq my-desktop-org-agenda-files '("~/Org/tasks.org", "~/Org/rec-tasks.org"))
 (setq my-desktop-manga-dir "~/Nextcloud/Books/Manga/")
 (setq my-desktop-music-dir "~/Nextcloud/Music/")
 (setq my-desktop-downloads-dir "~/Downloads")
