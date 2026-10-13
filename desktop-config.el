@@ -228,8 +228,6 @@
 
 ;; JSON/JS/TS indent width (apheleia's prettier follows it too):
 ;; (setq my-desktop-json-indent-level 2)
-;; Markdown preview converter:
-;; (setq my-desktop-markdown-command "multimarkdown")
 ;; CSV: alignment width and size limits for auto-align/rainbow colors:
 ;; (setq my-desktop-csv-align-width 40)
 ;; (setq my-desktop-csv-align-size-limit (* 10 1024 1024))

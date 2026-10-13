@@ -49,7 +49,12 @@ Only bound when the kitsu module is loaded
             ("C-c t" . my-term-new)
             ("C-c T" . my-term-project)
             ("C-c p" . my-media-toggle)
-            ("C-c M-w" . my-clipboard-copy-image)) ; copy image at point
+            ("C-c M-w" . my-clipboard-copy-image) ; copy image at point
+            ;; C-d: удалить выделение, иначе символ вперед.
+            ;; `delete-char' (стандартная C-d) игнорирует region;
+            ;; `delete-forward-char' работает как <delete>: с активным
+            ;; region удаляет выделение, иначе — символ вперед.
+            ("C-d" . delete-forward-char))
     (dired ("RET" . my-dired-find-file)) ; videos play in the external player
     (social ("b" . my-bluesky)
             ("h" . my-hackernews)

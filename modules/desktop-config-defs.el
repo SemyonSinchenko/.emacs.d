@@ -711,11 +711,6 @@ reads the same variables, as in the IDE."
   :type 'integer
   :group 'my-desktop)
 
-(defcustom my-desktop-markdown-command "multimarkdown"
-  "External command rendering Markdown previews (`markdown-command')."
-  :type 'string
-  :group 'my-desktop)
-
 (defcustom my-desktop-csv-align-width 40
   "Alignment width passed to `csv-align-max-width' in CSV/TSV buffers."
   :type 'integer

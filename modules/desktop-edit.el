@@ -29,11 +29,11 @@
 
 ;; --- Markdown / YAML / TOML (as in modules/lang-prog.el) -----------
 
-(use-package markdown-mode
-  :ensure t
-  :mode ("README\\.md\\'" . gfm-mode)
-  :init
-  (setq markdown-command my-desktop-markdown-command))
+(use-package markdown-modern
+  :vc (:url "https://github.com/rjprins/markdown-modern"
+       :lisp-dir "lisp"
+       :rev :newest)
+  :mode ("\\.\\(md\\|markdown\\)\\'" . markdown-modern-mode))
 
 (use-package yaml-mode
   :ensure t)
