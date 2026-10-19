@@ -6,6 +6,8 @@
 ;; - JSON/JS/TS indent with 2 spaces (shared with apheleia's prettier
 ;;   invocation, same as modules/lang-lsp.el),
 ;; - Markdown, YAML (+ yaml-pro), TOML modes (as in lang-prog.el),
+;; - smerge-mode gets priority over markdown-modern rendering while
+;;   merge conflicts are being resolved (see the smerge section),
 ;; - CSV/TSV with rainbow colors and size-limited auto alignment,
 ;; - apheleia formatting: automatic in JSON/YAML/TOML buffers,
 ;;   manual with C-x x f anywhere.
@@ -34,6 +36,79 @@
        :lisp-dir "lisp"
        :rev :newest)
   :mode ("\\.\\(md\\|markdown\\)\\'" . markdown-modern-mode))
+
+
+;; --- smerge-mode vs markdown-modern --------------------------------
+
+;; markdown-modern-mode turns font-lock off and draws the buffer with
+;; its own overlays, so `smerge-mode' shows no conflict highlighting
+;; and the <<<<<<< / ======= / >>>>>>> markers are hidden by the
+;; rendering.  Conflict resolution wins: while `smerge-mode' is on in
+;; a markdown-modern buffer, the buffer falls back to a plain
+;; font-locked mode, and markdown-modern comes back once the last
+;; conflict is resolved (smerge-mode off).
+
+(require 'smerge-mode)
+
+(defvar-local my-desktop--smerge-owns-buffer nil
+  "Non-nil when markdown-modern yielded this buffer to `smerge-mode'.")
+;; Survive the major-mode switches this mode juggling performs.
+(put 'my-desktop--smerge-owns-buffer 'permanent-local t)
+
+(defun my-desktop--smerge-have-conflict-p ()
+  "Return non-nil when the buffer has merge conflict markers."
+  (save-excursion
+    (save-restriction
+      (widen)
+      (goto-char (point-min))
+      (re-search-forward "^<<<<<<< " nil t))))
+
+(defun my-desktop--smerge-fallback-mode ()
+  "Switch the buffer to a plain font-locked Markdown mode."
+  (if (fboundp 'markdown-mode)
+      (markdown-mode)
+    (text-mode)))
+
+(defun my-desktop--smerge-priority ()
+  "Give `smerge-mode' priority over markdown-modern rendering.
+Runs from `smerge-mode-hook'.  In a markdown-modern buffer the
+major mode is switched to `markdown-mode' (or `text-mode') so that
+smerge conflict highlighting and the C-c ^ bindings work;
+markdown-modern comes back when `smerge-mode' turns off."
+  (cond
+   ((and smerge-mode (derived-mode-p 'markdown-modern-mode))
+    ;; Switching the major mode kills buffer-local `smerge-mode',
+    ;; so re-enable it after the switch.
+    (my-desktop--smerge-fallback-mode)
+    (setq my-desktop--smerge-owns-buffer t)
+    (smerge-mode 1))
+   ((and (not smerge-mode)
+         my-desktop--smerge-owns-buffer
+         (or (derived-mode-p 'markdown-mode)
+             (eq major-mode 'text-mode)))
+    (setq my-desktop--smerge-owns-buffer nil)
+    (markdown-modern-mode))))
+
+(defun my-desktop--smerge-md-modern-guard ()
+  "Keep an active smerge session when markdown-modern re-enters.
+Runs from `markdown-modern-mode-hook': a session started in this
+buffer is never dropped by re-entering markdown-modern by hand."
+  (when my-desktop--smerge-owns-buffer
+    (if (my-desktop--smerge-have-conflict-p)
+        (progn
+          (my-desktop--smerge-fallback-mode)
+          (smerge-mode 1))
+      (setq my-desktop--smerge-owns-buffer nil))))
+
+(defun my-desktop--smerge-maybe-enable ()
+  "Turn on `smerge-mode' when conflict markers are detected."
+  (when (my-desktop--smerge-have-conflict-p)
+    (smerge-mode 1)))
+
+(add-hook 'smerge-mode-hook #'my-desktop--smerge-priority)
+(add-hook 'find-file-hook #'my-desktop--smerge-maybe-enable)
+(add-hook 'after-revert-hook #'my-desktop--smerge-maybe-enable)
+(add-hook 'markdown-modern-mode-hook #'my-desktop--smerge-md-modern-guard)
 
 (use-package yaml-mode
   :ensure t)
