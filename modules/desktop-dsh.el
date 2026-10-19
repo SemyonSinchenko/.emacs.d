@@ -6,11 +6,17 @@
 ;; `run-dsh' (bins/run-dsh) starts the dev-dsh container in the current
 ;; folder and publishes the dsh web port on 127.0.0.1 in the range
 ;; 30780-30789 with a per-run launch token.  This module runs the
-;; launcher as an Emacs subprocess, watches its log buffer for the
-;; `dsh web: http://127.0.0.1:PORT/?token=TOKEN' line the server
-;; prints, points dsh-emacs at that exact URL and opens the session
-;; list.  Parallel sessions (different folders) are supported: C-c d
-;; reconnects to a running one or starts a new one in a chosen folder.
+;; launcher as an Emacs subprocess and watches its log buffer for TWO
+;; lines: the launcher banner `dsh web (host): http://127.0.0.1:PORT'
+;; (the host-side port) and the server's `dsh web:
+;; http://127.0.0.1:3080/?token=TOKEN' (container-side port + token).
+;; The port on the server's line is only valid INSIDE the container --
+;; dsh >= 0.2.0 prints no --public-url -- so the connect URL is
+;; composed here as HOST-URL/?token=TOKEN; connecting to the verbatim
+;; server line once probed a dead port and dropped dsh-emacs into its
+;; CLI-install fallback.  Parallel sessions (different folders) are
+;; supported: C-c d reconnects to a running one or starts a new one in
+;; a chosen folder.
 ;;
 ;; Stopping: `k' in the log buffer or `my-dsh-stop' closes the
 ;; launcher's stdin, which the container wrapper treats like Ctrl-D
@@ -69,12 +75,20 @@ Alist (DIR . PLIST) with PLIST keys :dir :proc :buffer :url :port
 :token :timer.  DIR is the expanded workspace directory; the entry
 is removed when the launcher process exits.")
 
-(defconst my-dsh--url-re
-  "http://127\\.0\\.0\\.1:\\([0-9]+\\)/\\?token=\\([A-Za-z0-9_-]+\\)"
-  "The `dsh web' URL run-dsh publishes: host port + launch token.
-The token charset mirrors dsh-emacs's own capture regex.  The
-placeholder `.../?token=...' lines in run-dsh's banner never match
-(token part is an ellipsis).")
+(defconst my-dsh--host-port-re
+  "dsh web (host): \\(http://[0-9A-Za-z._-]+\\):\\([0-9]+\\)"
+  "The launcher banner line: `dsh web (host): http://127.0.0.1:30783'.
+Group 1 is the host (always a loopback address today), group 2 the
+HOST-side published port.  This port is the only one reachable from
+Emacs; the server's own `dsh web:' line carries the container-side
+port (3080) which is dead on the host.")
+
+(defconst my-dsh--token-re
+  "dsh web: [^ ]*/\\?token=\\([A-Za-z0-9_-]+\\)"
+  "The server's launch-token line: `dsh web: http://.../?token=TOKEN'.
+Only the token is taken from here; the URL part is container-side.
+The placeholder `.../?token=...' lines in run-dsh's banner never
+match (token part is an ellipsis).")
 
 (defun my-dsh--strip-ansi (text)
   "Remove ANSI CSI escape sequences from chunk TEXT."
@@ -141,6 +155,17 @@ from `dsh-emacs-base-url' (see `dsh-emacs--server-auth-token-from-url')."
     (dsh-emacs--server-invalidate-alive))
   (when (fboundp 'dsh-emacs--server-auth-reset)
     (dsh-emacs--server-auth-reset))
+  ;; Guard against the CLI-install fallback: with the server in a
+  ;; container, `dsh-emacs-server-start' (which `dsh-emacs-list-sessions'
+  ;; calls regardless of `dsh-emacs-server-auto-start') would otherwise
+  ;; try to spawn -- and prompt to npm-install -- a HOST dsh here.
+  (unless (and (fboundp 'dsh-emacs--server-alive-p)
+               (dsh-emacs--server-alive-p))
+    (user-error "DSH in %s is not reachable at %s (probe failed); \
+check the container and the host port, see `%s'"
+                (plist-get session :dir)
+                (plist-get session :url)
+                (buffer-name (plist-get session :buffer))))
   (message "DSH: connecting to %s" (plist-get session :url))
   (dsh-emacs))
 
@@ -157,20 +182,43 @@ Use it for the first provider/model setup (Settings -> Models)."
 ;; ------------------------------------------------------------------
 
 (defun my-dsh--scan-url (session)
-  "Search SESSION's log buffer tail for the `dsh web' URL.
-Returns non-nil once the token line has been seen (it is then
-stored in the session plist).  Scanning covers the last 8 KiB, so
-a token line split across process chunks is still found; scanning
-stops after the first hit."
+  "Search SESSION's log buffer tail for the host port and the token.
+Composes the connect URL from the two independent lines: the
+launcher banner gives the host-side port, the server's `dsh web:'
+line gives the token.  Returns non-nil once both have been seen
+and :url is stored.  Scanning covers the last 8 KiB, so lines
+split across process chunks are still found; each part is captured
+only once."
   (when (and (not (plist-get session :url))
              (buffer-live-p (plist-get session :buffer)))
     (with-current-buffer (plist-get session :buffer)
       (save-excursion
         (goto-char (max (point-min) (- (point-max) 8192)))
-        (when (re-search-forward my-dsh--url-re nil t)
-          (plist-put session :port (match-string 1))
-          (plist-put session :token (match-string 2))
-          (plist-put session :url (match-string 0)))))))
+        (unless (plist-get session :host-url)
+          (when (re-search-forward my-dsh--host-port-re nil t)
+            (plist-put session :host-url (match-string 1))
+            (plist-put session :port (match-string 2))))
+        (unless (plist-get session :token)
+          (when (re-search-forward my-dsh--token-re nil t)
+            (plist-put session :token (match-string 1))))
+        ;; A cold start can emit many KiB of pnpm output between the
+        ;; launcher banner and the token line, pushing the banner out
+        ;; of the tail window; re-scan the whole buffer for it once the
+        ;; token is in (cheap: at most until the banner is found).
+        (when (and (not (plist-get session :host-url))
+                   (plist-get session :token))
+          (goto-char (point-min))
+          (when (re-search-forward my-dsh--host-port-re nil t)
+            (plist-put session :host-url (match-string 1))
+            (plist-put session :port (match-string 2))))
+        (when (and (plist-get session :host-url) (plist-get session :token))
+          (plist-put
+           session :url
+           (format "%s:%s/?token=%s"
+                   (plist-get session :host-url)
+                   (plist-get session :port)
+                   (plist-get session :token)))
+          t)))))
 
 (defun my-dsh--found-url (session)
   "Called once SESSION's token line appeared."
@@ -240,8 +288,8 @@ sem-dev-container/bins/run-dsh into ~/.local/bin"
                 my-desktop-dsh-command))
   (let* ((name (file-name-nondirectory (directory-file-name dir)))
          (buf (get-buffer-create (format "*dsh:%s*" name)))
-         (session (list :dir dir :buffer buf :url nil :port nil
-                        :token nil :proc nil :timer nil))
+         (session (list :dir dir :buffer buf :url nil :host-url nil
+                        :port nil :token nil :proc nil :timer nil))
          proc)
     (with-current-buffer buf
       (let ((inhibit-read-only t)) (erase-buffer))
