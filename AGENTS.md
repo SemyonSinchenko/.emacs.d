@@ -35,6 +35,7 @@ configurations**:
 │   ├── desktop-keys.el      # Desktop keybindings table + root transient menu
 │   ├── desktop-term.el      # ghostel terminals
 │   ├── desktop-fm.el        # Dired / dirvish file management
+│   ├── desktop-project.el   # project.el roots mapped to perspective workspaces
 │   ├── desktop-kitsu.el     # Kitsu tracker: org dashboard, search, trending
 │   ├── desktop-org.el       # Org + org-roam (Desktop daemon owns the roam DB)
 │   ├── desktop-pomodoro.el  # pomm.el pomodoro timer + GNOME dbus notifications
@@ -198,6 +199,10 @@ Always include `lexical-binding: t` at the top of every file.
     (a agenda, t todo list; `p` nested pomodoro prefix: p transient,
     s/S/P start/stop/pause, c context, m modeline toggle) with the
     pomodoro sub-keys bound only when `desktop-pomodoro' is loaded.
+  - `C-c b` - project prefix (`b` list/open a project workspace, `a` add
+    a project, `s` built-in project switch dispatcher). `C-c t` opens a new
+    terminal at the current project perspective's root; `C-c T` prompts for
+    a project root.
   - Top level: ``C-c ` `` (treemacs sidebar), `C-c m` (sync menu),
     `C-c t` / `C-c T` (terminal), `C-c p` (music play/pause),
     `C-c M-w` (copy image at point), `C-c d` (DSH container,

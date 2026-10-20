@@ -17,10 +17,15 @@
 ;; c close, n/p or <right>/<left> cycle, 1..9/0 by position,
 ;; b switch buffer, o buffers overview, m/u merge/unmerge,
 ;; C-s/C-l state save/load.
+;; Projects live under C-c b: b opens a project workspace, a adds a
+;; project, and s exposes the built-in project switch dispatcher.
 ;; Social apps live under the C-c s prefix: b bluesky, h hackernews,
 ;; l lemmy, r reddit, t telegram.
 (defvar my-social-map (make-sparse-keymap)
   "Nested keymap of social apps, bound to C-c s.")
+
+(defvar my-project-map (make-sparse-keymap)
+  "Nested keymap of project commands, bound to C-c b.")
 
 (defvar my-ai-map (make-sparse-keymap)
   "Nested keymap of AI commands, bound to C-c a.")
@@ -54,7 +59,7 @@ Only populated when the pomodoro module is loaded.")
             ("C-x k" . persp-kill-buffer*)      ; kill within workspace
             ("C-c `" . my-sidebar-toggle)       ; treemacs file tree
             ("C-c m" . my-sync-menu)
-            ("C-c t" . my-term-new)
+            ("C-c t" . my-project-terminal)
             ("C-c T" . my-term-project)
             ("C-c p" . my-media-toggle)
             ("C-c M-w" . my-clipboard-copy-image) ; copy image at point
@@ -65,6 +70,9 @@ Only populated when the pomodoro module is loaded.")
             ;; region удаляет выделение, иначе — символ вперед.
             ("C-d" . delete-forward-char))
     (dired ("RET" . my-dired-find-file)) ; videos play in the external player
+    (project ("b" . my-project-open)
+             ("a" . my-project-add)
+             ("s" . project-switch-project))
     (social ("b" . my-bluesky)
             ("h" . my-hackernews)
             ("l" . my-lem)
@@ -126,6 +134,9 @@ Only populated when the pomodoro module is loaded.")
      (with-eval-after-load 'ghostel
        (dolist (b binds)
          (my-keys--bind ghostel-mode-map (car b) (cdr b)))))
+    ('project
+     (dolist (b binds)
+       (my-keys--bind my-project-map (car b) (cdr b))))
     ('social
      (dolist (b binds)
        (my-keys--bind my-social-map (car b) (cdr b))))
@@ -160,6 +171,7 @@ Only populated when the pomodoro module is loaded.")
   "Apply default and user keybindings."
   (dolist (entry my-desktop--default-keys)
     (my-keys--apply-context (car entry) (cdr entry)))
+  (define-key global-map (kbd "C-c b") my-project-map)
   (define-key global-map (kbd "C-c s") my-social-map)
   (define-key global-map (kbd "C-c a") my-ai-map)
   (when (fboundp 'lexicon-org-transform)

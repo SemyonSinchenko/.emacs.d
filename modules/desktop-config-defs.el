@@ -753,7 +753,8 @@ Each opens Dired.  Example:
 (defcustom my-desktop-keybindings nil
   "Extra keybindings applied on top of machinery defaults.
 Structure: list of (CONTEXT . ((KEY-STRING . COMMAND) ...)).
-CONTEXT is `global', `dired', or `ghostel'.
+CONTEXT is `global', `dired', `ghostel', `project', `social', `ai',
+`lexicon', `roguelike', `kitsu', `org', or `pomodoro'.
 COMMAND must be an existing command; missing commands are reported
 as warnings but never break startup.
 

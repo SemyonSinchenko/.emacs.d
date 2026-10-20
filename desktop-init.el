@@ -185,6 +185,7 @@
              desktop-home
              (desktop-term . my-desktop-enable-ghostel)
              desktop-fm
+             desktop-project
              desktop-org
              (desktop-pomodoro . my-desktop-enable-pomodoro)
              (desktop-reader . my-desktop-enable-reader)
