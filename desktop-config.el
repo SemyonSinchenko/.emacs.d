@@ -209,10 +209,12 @@
 (setq my-desktop-ai-markitdown "markitdown") ; uv tool install "markitdown[all]"
 (setq my-desktop-ai-history-default nil)     ; opt in per chat
 
-;; Z-AI coding plan usage dashboard (C-c a z); key comes from the
-;; environment variable named below:
+;; AI usage dashboard (C-c a z): Z-AI coding plan + DeepSeek
+;; balance.  Keys come from the environment variables named below:
 (setq my-desktop-ai-zai-api-url "https://api.z.ai")
 (setq my-desktop-ai-zai-api-key-env "ZAI_API_KEY")
+(setq my-desktop-ai-deepseek-api-url "https://api.deepseek.com")
+(setq my-desktop-ai-deepseek-api-key-env "DEEPSEEK_API_KEY")
 
 ;; ------------------------------------------------------------------
 ;; 9b. Roguelike copilot

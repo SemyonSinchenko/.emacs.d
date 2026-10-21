@@ -29,6 +29,73 @@
   :defer t
   :commands (magit-status-setup-buffer magit-toplevel))
 
+;;; Commit safety
+
+(defvar git-commit-mode)
+(defvar magit-commit-show-diff)
+(defvar transient-values)
+(declare-function magit-commit-diff "magit-commit" ())
+
+(defun my-desktop-magit--large-diff-p ()
+  "Return non-nil when the staged diff exceeds the configured size.
+The diff is piped through `head', so at most one character more than
+the limit is read into Emacs."
+  (when my-desktop-magit-max-diff-size
+    (let* ((limit my-desktop-magit-max-diff-size)
+           (default-directory (or (magit-toplevel) default-directory))
+           (command (format (concat "git diff --cached --no-color"
+                                    " --no-ext-diff | head -c %d")
+                            (1+ limit))))
+      (with-temp-buffer
+        (call-process-shell-command command nil t)
+        (> (buffer-size) limit)))))
+
+(defun my-desktop-magit--trim-large-inline-diff ()
+  "Remove an oversized inline diff from a commit message buffer.
+Git appends the staged diff below its cut line when `git commit
+--verbose' is used.  Magit then fontifies the whole diff in
+`git-commit-propertize-diff'; for tens of megabytes that blocks
+Emacs.  This runs first in `git-commit-setup-hook', before that
+fontification, and leaves the message above the cut line intact."
+  (when (and my-desktop-magit-max-diff-size
+             (bound-and-true-p git-commit-mode))
+    (let ((comment (or comment-start "#")))
+      (save-excursion
+        (goto-char (point-min))
+        (when (re-search-forward
+               (format "^%s -\\{8,\\} >8 -\\{8,\\}$"
+                       (regexp-quote comment))
+               nil t)
+          (let ((start (line-beginning-position))
+                (size (- (point-max) (line-beginning-position))))
+            (when (> size my-desktop-magit-max-diff-size)
+              (delete-region start (point-max))
+              (insert (format (concat "%s Inline diff omitted (%.1f MiB)"
+                                      "; use C-c C-d to show it.\n")
+                              comment
+                              (/ size (* 1024.0 1024.0)))))))))))
+
+(defun my-desktop-magit--commit-diff-around (orig)
+  "Skip the automatic commit diff buffer for a huge staged diff.
+ORIG is `magit-commit-diff'."
+  (if (and (bound-and-true-p git-commit-mode)
+           (my-desktop-magit--large-diff-p))
+      (let ((magit-commit-show-diff nil))
+        (message (concat "Staged diff is large; automatic diff"
+                         " suppressed (C-c C-d to show)"))
+        (funcall orig))
+    (funcall orig)))
+
+(with-eval-after-load 'git-commit
+  (add-hook 'git-commit-setup-hook
+            #'my-desktop-magit--trim-large-inline-diff))
+
+(with-eval-after-load 'magit-commit
+  (unless my-desktop-magit-inline-diff
+    (setf (alist-get 'magit-commit transient-values) nil))
+  (advice-add 'magit-commit-diff :around
+              #'my-desktop-magit--commit-diff-around))
+
 (defvar my-project--root-to-perspective (make-hash-table :test #'equal)
   "Map canonical project roots to perspective names for this session.")
 

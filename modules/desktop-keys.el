@@ -94,7 +94,7 @@ Only populated when the pomodoro module is loaded.")
         ("g" . gptel-menu)            ; gptel settings menu
         ("l" . my-ai-session-search)  ; search transcripts (grep)
         ("s" . my-ai-session-save)    ; save chat now
-        ("z" . my-ai-zai-usage))      ; Z-AI coding plan usage
+        ("z" . my-ai-usage))          ; Z-AI plan + DeepSeek balance
     (lexicon ("t" . lexicon-org-transform)        ; transform region
              ("p" . lexicon-org-transform-prompt) ; prompt for transform
              ("d" . lexicon-org-download)         ; download model
@@ -213,8 +213,8 @@ Only populated when the pomodoro module is loaded.")
      :if (lambda () (fboundp 'my-ai-chat)))
     ("D" "DSH container" my-dsh-open
      :if (lambda () (fboundp 'my-dsh-open)))
-    ("z" "Z-AI usage" my-ai-zai-usage
-     :if (lambda () (fboundp 'my-ai-zai-usage)))
+    ("z" "AI usage" my-ai-usage
+     :if (lambda () (fboundp 'my-ai-usage)))
     ("l" "Lexicon transform" lexicon-org-transform
      :if (lambda () (fboundp 'lexicon-org-transform)))
     ("m" "Music library" my-media-music-library

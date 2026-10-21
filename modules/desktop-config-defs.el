@@ -250,6 +250,30 @@ open per-machine startup content."
   :group 'my-desktop)
 
 ;; ------------------------------------------------------------------
+;; 3b. Git / Magit commits
+;; ------------------------------------------------------------------
+
+(defcustom my-desktop-magit-inline-diff nil
+  "Whether Magit's commit popup starts with `--verbose'.
+When nil, the staged diff is not appended to COMMIT_EDITMSG.  The
+commit-time diff buffer still shows it, unless it is larger than
+`my-desktop-magit-max-diff-size'.  Toggle `-v' in the commit popup
+to get an inline diff for one commit."
+  :type 'boolean
+  :group 'my-desktop)
+
+(defcustom my-desktop-magit-max-diff-size (* 2 1024 1024)
+  "Maximum size of a diff Magit may handle automatically.
+Above this size the inline verbose diff is removed from the commit
+message buffer before it is fontified, and the automatic commit-time
+diff buffer is suppressed.  Use `C-c C-d' to show the diff on
+demand.  Nil disables both guards.  Sizes are compared in characters;
+the staged-diff check stops git after one character more than the
+limit."
+  :type '(choice natnum (const nil))
+  :group 'my-desktop)
+
+;; ------------------------------------------------------------------
 ;; 4. Terminal
 ;; ------------------------------------------------------------------
 
@@ -618,13 +642,46 @@ The tool result states the offset to continue from."
 
 (defcustom my-desktop-ai-zai-api-url "https://api.z.ai"
   "Base URL of the Z-AI monitor API used by the usage dashboard
-(`my-ai-zai-usage', C-c a z)."
+(`my-ai-usage', C-c a z)."
   :type 'string
   :group 'my-desktop)
 
 (defcustom my-desktop-ai-zai-api-key-env "ZAI_API_KEY"
   "Environment variable that holds the Z-AI coding-plan API key."
   :type 'string
+  :group 'my-desktop)
+
+(defcustom my-desktop-ai-deepseek-api-url "https://api.deepseek.com"
+  "Base URL of the DeepSeek API (account balance, C-c a z)."
+  :type 'string
+  :group 'my-desktop)
+
+(defcustom my-desktop-ai-deepseek-api-key-env "DEEPSEEK_API_KEY"
+  "Environment variable that holds the DeepSeek API key."
+  :type 'string
+  :group 'my-desktop)
+
+(defcustom my-desktop-ai-deepseek-peak-windows '((1 . 4) (6 . 10))
+  "DeepSeek peak hours as (START . END) UTC hour ranges.
+Half-open: START inclusive, END exclusive.  Monday-Friday only;
+weekends and Chinese public holidays are off-peak all day."
+  :type '(repeat (cons natnum natnum))
+  :group 'my-desktop)
+
+(defcustom my-desktop-ai-deepseek-cn-holidays
+  '("2026-01-01" "2026-01-02" "2026-01-03"
+    "2026-02-15" "2026-02-16" "2026-02-17" "2026-02-18" "2026-02-19"
+    "2026-02-20" "2026-02-21" "2026-02-22" "2026-02-23"
+    "2026-04-04" "2026-04-05" "2026-04-06"
+    "2026-05-01" "2026-05-02" "2026-05-03" "2026-05-04" "2026-05-05"
+    "2026-06-19" "2026-06-20" "2026-06-21"
+    "2026-09-25" "2026-09-26" "2026-09-27"
+    "2026-10-01" "2026-10-02" "2026-10-03" "2026-10-04" "2026-10-05"
+    "2026-10-06" "2026-10-07")
+  "Chinese public holidays (ISO dates) that are off-peak all day.
+Taken from the State Council 2026 holiday notice; extend the list
+when the next year's schedule is published."
+  :type '(repeat string)
   :group 'my-desktop)
 
 ;; ------------------------------------------------------------------

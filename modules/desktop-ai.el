@@ -1073,7 +1073,7 @@ alone.  Resume saved sessions with `my-ai-session-open'."
     buf))
 
 ;; ------------------------------------------------------------------
-;; Z-AI coding plan usage dashboard (C-c a z)
+;; AI usage dashboard (C-c a z): Z-AI plan + DeepSeek account
 ;; ------------------------------------------------------------------
 ;; https://api.z.ai/api/monitor/usage/quota/limit ->
 ;;   limits: (type "TOKENS_LIMIT" unit 3 number 5) = 5-hour window,
@@ -1251,10 +1251,104 @@ Return (TOKENS CALLS MODEL-PAIRS); MODEL-PAIRS is an alist
                       ""))))
      "\n")))
 
-(defun my-ai-zai-usage ()
-  "Show Z-AI coding-plan usage in the minibuffer."
+;; https://api-docs.deepseek.com/api/get-user-balance ->
+;;   {is_available: bool, balance_infos: [{currency, total_balance,
+;;                                        granted_balance, topped_up_balance}]}
+;; Peak windows are UTC, Monday-Friday, except Chinese public holidays
+;; (off-peak all day).  Ranges are half-open [start, end).
+
+(defconst my-ai-deepseek--currency-symbols
+  '(("USD" . "$") ("CNY" . "\u00a5"))
+  "Currency signs for the DeepSeek balance line.")
+
+(defun my-ai-deepseek--request ()
+  "GET /user/balance from DeepSeek; return the parsed response."
+  (let* ((key (or (getenv my-desktop-ai-deepseek-api-key-env)
+                  (user-error "Env var %s is not set (DeepSeek API key)"
+                              my-desktop-ai-deepseek-api-key-env)))
+         (url-request-extra-headers
+          `(("Authorization" . ,(concat "Bearer " key))
+            ("Accept" . "application/json")))
+         (resp (my-ai--http-body
+                (concat my-desktop-ai-deepseek-api-url "/user/balance"))))
+    (unless resp
+      (user-error "DeepSeek balance: request failed (no response)"))
+    (unless (= (car resp) 200)
+      (user-error "DeepSeek balance: HTTP %d" (car resp)))
+    (json-parse-string (cdr resp)
+                       :object-type 'alist
+                       :array-type 'list)))
+
+(defun my-ai-deepseek--money (amount currency)
+  "Format AMOUNT with the sign for CURRENCY."
+  (format "%s%s"
+          (or (cdr (assoc-string currency
+                                 my-ai-deepseek--currency-symbols))
+              (concat currency " "))
+          amount))
+
+(defun my-ai-deepseek--balance-line (data)
+  "Return the total-balance line from the balance API response DATA."
+  (let ((infos (alist-get 'balance_infos data)))
+    (if (null infos)
+        "balance  (not reported)"
+      (concat "balance  "
+              (mapconcat (lambda (info)
+                           (my-ai-deepseek--money
+                            (alist-get 'total_balance info)
+                            (alist-get 'currency info)))
+                         infos " + ")))))
+
+(defun my-ai-deepseek-peak-p (&optional time)
+  "Non-nil when TIME is inside a DeepSeek peak window.
+TIME defaults to now and is interpreted in UTC."
+  (let* ((time (or time (current-time)))
+         (decoded (decode-time time t))
+         (dow (nth 6 decoded))
+         (hour (nth 2 decoded))
+         (date (format-time-string "%Y-%m-%d" time t)))
+    (and (>= dow 1) (<= dow 5)
+         (not (member date my-desktop-ai-deepseek-cn-holidays))
+         (seq-some (lambda (window)
+                     (and (>= hour (car window))
+                          (< hour (cdr window))))
+                   my-desktop-ai-deepseek-peak-windows))))
+
+(defun my-ai-deepseek--pricing-line (&optional time)
+  "Return the peak/off-peak line for TIME (default: now)."
+  (if (my-ai-deepseek-peak-p time)
+      "pricing  peak now (full rate)"
+    "pricing  off-peak now (50% off)"))
+
+(defun my-ai-deepseek--dashboard ()
+  "Build the DeepSeek account dashboard text."
+  (let ((data (my-ai-deepseek--request)))
+    (string-join
+     (list "DeepSeek account"
+           (my-ai-deepseek--balance-line data)
+           (my-ai-deepseek--pricing-line))
+     "\n")))
+
+(defun my-ai-usage--section (fn)
+  "Call FN and return its text; on error return an ERROR line."
+  (condition-case err
+      (funcall fn)
+    (error (format "ERROR: %s" (error-message-string err)))))
+
+(defun my-ai-usage--dashboard ()
+  "Build the combined Z-AI and DeepSeek usage dashboard text."
+  (string-join
+   (list (my-ai-usage--section #'my-ai-zai-usage--dashboard)
+         ""
+         "============================================================"
+         ""
+         (my-ai-usage--section #'my-ai-deepseek--dashboard))
+   "\n"))
+
+(defun my-ai-usage ()
+  "Show Z-AI plan and DeepSeek account usage in the minibuffer."
   (interactive)
-  (message "%s" (my-ai-zai-usage--dashboard)))
+  (message "%s" (my-ai-usage--dashboard)))
 
 (provide 'desktop-ai)
 ;;; desktop-ai.el ends here
