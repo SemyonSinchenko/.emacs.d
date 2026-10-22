@@ -55,6 +55,9 @@
 (declare-function agent-shell-start "agent-shell" t)
 (declare-function agent-shell-project-buffers "agent-shell" (&optional cwd))
 (declare-function agent-shell-get-config "agent-shell" (buffer))
+(declare-function agent-shell-clear-buffer "agent-shell" ())
+(declare-function agent-shell-send-file "agent-shell"
+                  (&optional prompt-for-file pick-shell))
 (declare-function agent-shell--make-acp-client "agent-shell" t)
 (declare-function agent-shell-deepseek-make-agent-config "agent-shell-deepseek")
 (declare-function agent-shell-deepseek--welcome-message "agent-shell-deepseek"
@@ -207,6 +210,36 @@ stops the container."
         (user-error "DSH ACP: agent is still running")))
     (my-dsh-acp--start root)))
 
+;;;###autoload
+(defun my-dsh-acp-clear-buffer ()
+  "Clear the DSH ACP agent buffer for this project.
+When called from a DSH ACP shell, clear that buffer; otherwise clear
+the shell belonging to the current project."
+  (interactive)
+  (my-dsh-acp--require-agent-shell)
+  (let ((buffer
+         (if (and (derived-mode-p 'agent-shell-mode)
+                  (eq (alist-get :identifier
+                                 (agent-shell-get-config (current-buffer)))
+                      'dsh-acp))
+             (current-buffer)
+           (my-dsh-acp--project-shell (my-dsh-acp--project-root)))))
+    (unless (buffer-live-p buffer)
+      (user-error "No DSH ACP agent in this perspective"))
+    (with-current-buffer buffer
+      (unless (fboundp 'agent-shell-clear-buffer)
+        (user-error "DSH ACP: `agent-shell-clear-buffer' is not available"))
+      (agent-shell-clear-buffer)
+      (message "DSH ACP: cleared %s" (buffer-name buffer)))))
+
+;;;###autoload
+(defun my-dsh-acp-send-file (&optional prompt-for-file)
+  "Send a file to the DSH ACP agent.
+With prefix argument PROMPT-FOR-FILE, always prompt for the file."
+  (interactive "P")
+  (my-dsh-acp--require-agent-shell)
+  (agent-shell-send-file prompt-for-file))
+
 ;; ------------------------------------------------------------------
 ;; Menu: C-c a d
 ;; ------------------------------------------------------------------
@@ -216,7 +249,9 @@ stops the container."
   [["DSH ACP"
     ("r" "Run / focus agent" my-dsh-acp-open :transient nil)
     ("k" "Kill agent" my-dsh-acp-kill :transient nil)
-    ("R" "Restart agent" my-dsh-acp-restart :transient nil)]
+    ("R" "Restart agent" my-dsh-acp-restart :transient nil)
+    ("n" "Clear agent buffer" my-dsh-acp-clear-buffer :transient nil)
+    ("f" "Send file to agent" my-dsh-acp-send-file :transient nil)]
    ["Old dsh-emacs (web)"
     ("w" "Run / reconnect web" my-dsh-open :transient nil
      :if (lambda () (fboundp 'my-dsh-open)))

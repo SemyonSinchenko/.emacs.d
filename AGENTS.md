@@ -189,17 +189,18 @@ Always include `lexical-binding: t` at the top of every file.
   on top (same key = user wins).
 - Desktop keys already taken (do not shadow them):
   - `C-c w` - workspace prefix (perspective: switch/create/rename/close,
-    buffer overview); `C-x b` / `C-x k` are workspace-scoped.
+    buffer overview, `g` ghostel buffer picker); `C-x b` / `C-x k` are
+    workspace-scoped.
   - `C-c s` - social prefix (b bluesky, h hackernews, l lemmy, r reddit,
     t telegram); `C-c K` - kitsu prefix (d dashboard, s search, t
     trending), bound only when `desktop-kitsu' is loaded;
     `C-c a` - AI prefix (a chat, d DSH menu: r open/focus the ACP
-    agent, k kill it, R restart it, w/W the old dsh-emacs web
-    run/kill; one ACP agent per project; f attach file,
-    h history toggle, o open chat, r rename chat, l search, s save,
-    g gptel-menu, z Z-AI usage); `C-c l` - lexicon prefix (t
-    transform, p prompt, d download, s status, r remove-last), bound
-    only when `desktop-lexicon' is loaded; `C-c o` - org prefix
+    agent, k kill it, R restart it, n clear its buffer, f send a file,
+    w/W the old dsh-emacs web run/kill; one ACP agent per project;
+    f attach file, h history toggle, o open chat, r rename chat,
+    l search, s save, g gptel-menu, z Z-AI usage); `C-c l` - lexicon
+    prefix (t transform, p prompt, d download, s status, r remove-last),
+    bound only when `desktop-lexicon' is loaded; `C-c o` - org prefix
     (a agenda, t todo list; `p` nested pomodoro prefix: p transient,
     s/S/P start/stop/pause, c context, m modeline toggle) with the
     pomodoro sub-keys bound only when `desktop-pomodoro' is loaded.

@@ -17,6 +17,9 @@
 (defvar ghostel-buffer-name-function)
 
 (declare-function persp-current-name "perspective")
+(declare-function persp-add-buffer "perspective" (buffer-or-name))
+(declare-function ghostel-list-buffers "ghostel" ())
+(defvar perspective-map)
 
 (use-package ghostel
   :ensure t
@@ -24,6 +27,11 @@
                      ghostel-other consult-ghostel)
   :custom
   (ghostel-module-auto-install nil))
+
+;; C-c w g: pick a ghostel buffer.  This replaces perspective's
+;; `persp-add-buffer-to-frame-global', which the Desktop does not use.
+(with-eval-after-load 'perspective
+  (define-key perspective-map (kbd "g") #'ghostel-list-buffers))
 
 (defun my-term--next-id (ws)
   "Return the next terminal number for workspace WS.
