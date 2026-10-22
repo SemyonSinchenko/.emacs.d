@@ -262,6 +262,8 @@ Only populated when the pomodoro module is loaded.")
     ;; Frame look (font, opacity) applies live too.
     (when (fboundp 'my-desktop--apply-frame-now)
       (my-desktop--apply-frame-now))
+    (when (boundp 'my-desktop-mini-window-height)
+      (setq max-mini-window-height my-desktop-mini-window-height))
     (message
      "[desktop] config reloaded (frame/package/module-flag changes \
 need a daemon restart)")))

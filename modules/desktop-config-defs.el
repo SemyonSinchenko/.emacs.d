@@ -150,6 +150,14 @@ Below 100 the GNOME wallpaper shows through.  100 = opaque."
   :type 'boolean
   :group 'my-desktop)
 
+(defcustom my-desktop-mini-window-height 0.5
+  "Maximum height of the minibuffer and echo area.
+A float is a fraction of the frame height; an integer is a number
+of lines.  Multi-line reports (e.g. the C-c a z usage dashboard)
+are cut off when they need more than this."
+  :type '(choice (float :tag "Fraction of frame") integer)
+  :group 'my-desktop)
+
 (defcustom my-desktop-theme-flavor 'frappe
   "Catppuccin flavor: latte, frappe, macchiato, mocha, or none."
   :type '(choice (const latte) (const frappe) (const macchiato)

@@ -51,6 +51,9 @@
 (setq my-desktop-frame-undecorated t)
 (setq my-desktop-frame-maximized t)
 (setq my-desktop-show-menubar nil)
+;; Max echo-area/minibuffer height: 0.5 = half the frame.  Multi-line
+;; reports such as C-c a z (AI usage) need about ten lines.
+(setq my-desktop-mini-window-height 0.5)
 ;; (setq my-desktop-use-icons t)         ; needs a Nerd Font installed
 (setq my-desktop-display-time t)
 (setq my-desktop-display-battery t)

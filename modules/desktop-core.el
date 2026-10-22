@@ -14,7 +14,7 @@
   (tool-bar-mode -1)
   (scroll-bar-mode -1)
   (setq resize-mini-windows 'grow-only)
-  (setq max-mini-window-height 0.15)
+  (setq max-mini-window-height my-desktop-mini-window-height)
   (setq eldoc-echo-area-use-multiline-p t))
 (unless my-desktop-show-menubar (menu-bar-mode -1))
 
