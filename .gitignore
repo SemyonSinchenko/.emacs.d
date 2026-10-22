@@ -77,3 +77,6 @@ hackernews
 lem.plstore
 roguelike/
 .kitsuauth
+
+# DSH
+.dsh

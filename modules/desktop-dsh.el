@@ -6,22 +6,24 @@
 ;; `run-dsh' (bins/run-dsh) starts the dev-dsh container in the current
 ;; folder and publishes the dsh web port on 127.0.0.1 in the range
 ;; 30780-30789 with a per-run launch token.  This module runs the
-;; launcher as an Emacs subprocess and watches its log buffer for TWO
-;; lines: the launcher banner `dsh web (host): http://127.0.0.1:PORT'
-;; (the host-side port) and the server's `dsh web:
-;; http://127.0.0.1:3080/?token=TOKEN' (container-side port + token).
-;; The port on the server's line is only valid INSIDE the container --
-;; dsh >= 0.2.0 prints no --public-url -- so the connect URL is
-;; composed here as HOST-URL/?token=TOKEN; connecting to the verbatim
-;; server line once probed a dead port and dropped dsh-emacs into its
-;; CLI-install fallback.  Parallel sessions (different folders) are
-;; supported: C-c d reconnects to a running one or starts a new one in
-;; a chosen folder.
+;; launcher as an Emacs subprocess and watches its log buffer.  Once
+;; the server is ready, run-dsh prints three host-side lines -- the
+;; complete host URL (`http://127.0.0.1:PORT/?token=TOKEN'), the
+;; published port, and the raw token -- and those are the primary
+;; signal.  Older launchers are still understood via their banner
+;; (`dsh web (host): ...') plus the server's container-side
+;; `dsh web: .../?token=...' line; the container-side URL itself is
+;; never connected to (its 3080 port is dead on the host).  Parallel
+;; sessions (different folders) are supported: the `C-c a d' menu's
+;; `r' reconnects to a running one or starts a new one in a chosen
+;; folder; its `k' stops a session in the current perspective.
 ;;
-;; Stopping: `k' in the log buffer or `my-dsh-stop' closes the
-;; launcher's stdin, which the container wrapper treats like Ctrl-D
-;; (graceful shutdown).  The container keeps its state in ~/.dsh, so
-;; model/provider setup survives restarts.
+;; Stopping: `k' in the log buffer, `my-dsh-stop', or the `k' entry
+;; of the `C-c a d' menu closes the launcher's stdin, which the
+;; container wrapper treats like Ctrl-D (graceful shutdown).  The
+;; menu's `k' also kills the log buffer and only considers buffers
+;; in the current perspective.  The container keeps its state in
+;; ~/.dsh, so model/provider setup survives restarts.
 ;;
 ;; Requires the dsh-emacs package (installed below from GitHub) and
 ;; the `run-dsh' launcher on `exec-path'.
@@ -30,6 +32,7 @@
 
 (require 'desktop-config-defs)
 (require 'project)
+(require 'transient)
 
 ;; dsh-emacs is loaded lazily (its autoloads cover the commands); the
 ;; declarations keep the byte compiler quiet.
@@ -37,9 +40,12 @@
 (declare-function dsh-emacs-open-web "dsh-emacs")
 (declare-function dsh-emacs--server-invalidate-alive "dsh-emacs-server")
 (declare-function dsh-emacs--server-auth-reset "dsh-emacs-server")
+(declare-function persp-is-current-buffer "perspective"
+                  (buffer &optional include-global))
 (declare-function my-desktop--warn "desktop-init")
 (defvar dsh-emacs-base-url)
 (defvar dsh-emacs-server-auto-start)
+(defvar persp-mode)
 
 ;; dsh-emacs is GitHub-only (not on MELPA): install it as a VC
 ;; package on first load (package-vc needs no use-package :vc, so
@@ -53,6 +59,22 @@
        '(dsh-emacs :url "https://github.com/vritser/dsh-emacs"))
     (error (my-desktop--warn "dsh-emacs install failed: %s"
                              (error-message-string err)))))
+
+;; Compatibility shim for the installed dsh-emacs 0.5.0 on Emacs <31.
+;; Its `dsh-emacs-mode' assumes `yank-media-preferred-types' exists
+;; whenever `yank-media-handler' is autoloaded, but that variable is
+;; Emacs 31+: opening a session on Emacs 30 died with
+;;   (void-variable yank-media-preferred-types)
+;; Load yank-media first so a real Emacs 31 default is never shadowed;
+;; where the library has no such variable, bind nil so dsh-emacs'
+;; append is harmless (stock `yank-media' ignores the variable there
+;; anyway).  Upstream dsh-emacs HEAD guards this with `boundp'; drop the
+;; shim once the installed package catches up.
+(defvar yank-media-preferred-types)
+(when (require 'yank-media nil t)
+  (unless (boundp 'yank-media-preferred-types)
+    (setq yank-media-preferred-types nil)))
+
 (require 'dsh-emacs nil t)
 ;; The server lives in a container and is managed by run-dsh; never
 ;; let dsh-emacs spawn a host dsh behind it.  (Set before the package
@@ -75,20 +97,33 @@ Alist (DIR . PLIST) with PLIST keys :dir :proc :buffer :url :port
 :token :timer.  DIR is the expanded workspace directory; the entry
 is removed when the launcher process exits.")
 
+(defconst my-dsh--ready-re
+  (concat "^\\(https?://[^/[:space:]]+/\\?token=[^[:space:]]+\\)"
+          "[[:space:]]*\n"
+          "\\([0-9]+\\)[[:space:]]*\n"
+          "\\([^[:space:]]+\\)[[:space:]]*\n")
+  "The three-line ready block run-dsh prints after the server URL.
+Line 1 is the complete host URL (host port + token), line 2 the
+published host port, line 3 the raw token.  Every line must be
+newline-terminated so a chunk split mid-line cannot compose a URL
+from a truncated token.")
+
 (defconst my-dsh--host-port-re
-  "dsh web (host): \\(http://[0-9A-Za-z._-]+\\):\\([0-9]+\\)"
+  "^dsh web (host): \\(http://[0-9A-Za-z._-]+\\):\\([0-9]+\\)"
   "The launcher banner line: `dsh web (host): http://127.0.0.1:30783'.
 Group 1 is the host (always a loopback address today), group 2 the
 HOST-side published port.  This port is the only one reachable from
 Emacs; the server's own `dsh web:' line carries the container-side
-port (3080) which is dead on the host.")
+port (3080) which is dead on the host.  Used only as a fallback for
+launchers that predate the ready block.")
 
 (defconst my-dsh--token-re
-  "dsh web: [^ ]*/\\?token=\\([A-Za-z0-9_-]+\\)"
+  "^dsh web: [^ ]*/\\?token=\\([^[:space:]]+\\)[[:space:]]*\n"
   "The server's launch-token line: `dsh web: http://.../?token=TOKEN'.
 Only the token is taken from here; the URL part is container-side.
-The placeholder `.../?token=...' lines in run-dsh's banner never
-match (token part is an ellipsis).")
+The line must be newline-terminated, so a chunk split inside the
+token never stores a truncated value.  Used only as a fallback for
+launchers that predate the ready block.")
 
 (defun my-dsh--strip-ansi (text)
   "Remove ANSI CSI escape sequences from chunk TEXT."
@@ -111,11 +146,15 @@ match (token part is an ellipsis).")
   "Log of a DSH container launcher (run-dsh).
 \\{my-dsh-log-mode-map}")
 
+(defun my-dsh--session-for-buffer (buffer)
+  "Return the DSH session whose log buffer is BUFFER, or nil."
+  (cdr (seq-find (lambda (entry)
+                   (eq (plist-get (cdr entry) :buffer) buffer))
+                 my-dsh--sessions)))
+
 (defun my-dsh--buffer-session ()
   "The session shown by the current log buffer, or nil."
-  (cdr (seq-find (lambda (entry)
-                   (eq (plist-get (cdr entry) :buffer) (current-buffer)))
-                 my-dsh--sessions)))
+  (my-dsh--session-for-buffer (current-buffer)))
 
 (defun my-dsh-stop-buffer-session ()
   "Stop the DSH session whose log buffer is current."
@@ -126,11 +165,13 @@ match (token part is an ellipsis).")
 
 (defun my-dsh-connect-buffer-session ()
   "Connect dsh-emacs to the session whose log buffer is current.
-Re-scans the whole log, so it also works after the token appeared
+Re-scans the whole log, so it also works after the URL appeared
 while the startup notice already fired."
   (interactive)
   (if-let* ((session (my-dsh--buffer-session)))
-      (my-dsh--connect session)
+      (progn
+        (my-dsh--scan-url session)
+        (my-dsh--connect session))
     (user-error "No DSH session is bound to this buffer")))
 
 ;; ------------------------------------------------------------------
@@ -182,46 +223,66 @@ Use it for the first provider/model setup (Settings -> Models)."
 ;; ------------------------------------------------------------------
 
 (defun my-dsh--scan-url (session)
-  "Search SESSION's log buffer tail for the host port and the token.
-Composes the connect URL from the two independent lines: the
-launcher banner gives the host-side port, the server's `dsh web:'
-line gives the token.  Returns non-nil once both have been seen
-and :url is stored.  Scanning covers the last 8 KiB, so lines
-split across process chunks are still found; each part is captured
-only once."
+  "Search SESSION's log buffer for a ready-to-use host URL.
+run-dsh prints a three-line block (complete URL, port, token) once
+the server is up; that is the primary signal.  Older launchers only
+print the banner and the server's `dsh web: ...?token=' line, so
+those are still parsed as a fallback.  Returns non-nil once :url is
+stored.  Scanning covers the last 8 KiB, so lines split across
+process chunks are still found."
   (when (and (not (plist-get session :url))
              (buffer-live-p (plist-get session :buffer)))
     (with-current-buffer (plist-get session :buffer)
       (save-excursion
-        (goto-char (max (point-min) (- (point-max) 8192)))
-        (unless (plist-get session :host-url)
-          (when (re-search-forward my-dsh--host-port-re nil t)
-            (plist-put session :host-url (match-string 1))
-            (plist-put session :port (match-string 2))))
-        (unless (plist-get session :token)
-          (when (re-search-forward my-dsh--token-re nil t)
-            (plist-put session :token (match-string 1))))
-        ;; A cold start can emit many KiB of pnpm output between the
-        ;; launcher banner and the token line, pushing the banner out
-        ;; of the tail window; re-scan the whole buffer for it once the
-        ;; token is in (cheap: at most until the banner is found).
-        (when (and (not (plist-get session :host-url))
-                   (plist-get session :token))
-          (goto-char (point-min))
-          (when (re-search-forward my-dsh--host-port-re nil t)
-            (plist-put session :host-url (match-string 1))
-            (plist-put session :port (match-string 2))))
-        (when (and (plist-get session :host-url) (plist-get session :token))
-          (plist-put
-           session :url
-           (format "%s:%s/?token=%s"
-                   (plist-get session :host-url)
-                   (plist-get session :port)
-                   (plist-get session :token)))
-          t)))))
+        (let ((start (max (point-min) (- (point-max) 8192))))
+          (goto-char start)
+          (cond
+           ;; New run-dsh: URL, port and token as three complete lines.
+           ((re-search-forward my-dsh--ready-re nil t)
+            (let ((url (match-string 1)))
+              (plist-put session :url url)
+              (plist-put session :port (match-string 2))
+              (plist-put session :token (match-string 3))
+              (plist-put session :host-url
+                         (replace-regexp-in-string
+                          "/\\?token=.*\\'" "" url)))
+            t)
+           (t
+            ;; Fallback for older run-dsh: compose the URL from the
+            ;; banner's host port and the server line's token.  Reset
+            ;; point before each search: a failed `re-search-forward'
+            ;; leaves it at the search limit.
+            (unless (plist-get session :host-url)
+              (goto-char start)
+              (when (re-search-forward my-dsh--host-port-re nil t)
+                (plist-put session :host-url (match-string 1))
+                (plist-put session :port (match-string 2))))
+            (unless (plist-get session :token)
+              (goto-char start)
+              (when (re-search-forward my-dsh--token-re nil t)
+                (plist-put session :token (match-string 1))))
+            ;; A cold start can emit many KiB of pnpm output between the
+            ;; launcher banner and the token line, pushing the banner out
+            ;; of the tail window; re-scan the whole buffer for it once the
+            ;; token is in (cheap: at most until the banner is found).
+            (when (and (not (plist-get session :host-url))
+                       (plist-get session :token))
+              (goto-char (point-min))
+              (when (re-search-forward my-dsh--host-port-re nil t)
+                (plist-put session :host-url (match-string 1))
+                (plist-put session :port (match-string 2))))
+            (when (and (plist-get session :host-url)
+                       (plist-get session :token))
+              (plist-put
+               session :url
+               (format "%s:%s/?token=%s"
+                       (plist-get session :host-url)
+                       (plist-get session :port)
+                       (plist-get session :token)))
+              t))))))))
 
 (defun my-dsh--found-url (session)
-  "Called once SESSION's token line appeared."
+  "Called once SESSION's host URL (or token line) appeared."
   (my-dsh--cancel-timer session)
   ;; Never run dsh-emacs RPCs inside the process filter: hand the
   ;; connect to a short timer (skipped when the session died meanwhile).
@@ -272,7 +333,7 @@ only once."
     (message
      "DSH in %s is still starting after %ds (first run initializes the \
 dsh profile and can take minutes) -- watch `%s', press g there or run \
-`my-dsh-open' again once `dsh web:' appears"
+`my-dsh-open' again once run-dsh prints its host URL"
      (plist-get session :dir) my-desktop-dsh-wait-seconds
      (buffer-name (plist-get session :buffer)))))
 
@@ -348,7 +409,7 @@ may then need `podman rm -f')."
   "Open dsh-emacs on a DSH session for DIR.
 With a session already running in DIR: connect to it (switching
 `dsh-emacs-base-url' there).  With a starting one: report.  With
-none: start `run-dsh' in DIR, wait for its `dsh web: ...' line and
+none: start `run-dsh' in DIR, wait for its ready URL block and
 connect.  Several sessions in different folders can run in
 parallel; each container gets its own host port."
   (interactive
@@ -372,6 +433,91 @@ parallel; each container gets its own host port."
         (setq my-dsh--sessions
               (assoc-delete-all dir my-dsh--sessions)))
       (my-dsh--start dir)))))
+
+;; ------------------------------------------------------------------
+;; kill: only sessions shown in the current workspace
+;; ------------------------------------------------------------------
+
+(defun my-dsh--in-current-workspace-p (buffer)
+  "Non-nil when BUFFER belongs to the current perspective.
+With perspective mode off there is only one workspace, so every
+buffer qualifies."
+  (if (and (bound-and-true-p persp-mode)
+           (fboundp 'persp-is-current-buffer))
+      (persp-is-current-buffer buffer)
+    t))
+
+(defun my-dsh--current-log-buffers ()
+  "Return the DSH log buffers of the current perspective.
+Sorted by buffer name so the completion menu is stable."
+  (sort (seq-filter
+         (lambda (buffer)
+           (and (buffer-live-p buffer)
+                (with-current-buffer buffer
+                  (derived-mode-p 'my-dsh-log-mode))
+                (my-dsh--in-current-workspace-p buffer)))
+         (buffer-list))
+        (lambda (a b)
+          (string< (buffer-name a) (buffer-name b)))))
+
+(defun my-dsh--kill-label (buffer)
+  "Completion label for killing DSH log BUFFER."
+  (let ((session (my-dsh--session-for-buffer buffer)))
+    (format "%s [%s]%s"
+            (buffer-name buffer)
+            (cond ((null session) "stopped")
+                  ((plist-get session :port))
+                  (t "starting"))
+            (if-let* ((dir (plist-get session :dir)))
+                (format " %s" (abbreviate-file-name dir))
+              ""))))
+
+(defun my-dsh-kill ()
+  "Kill a DSH session in the current workspace.
+Only DSH log buffers of the current perspective are considered.
+With one buffer, stop its launcher and kill the buffer without
+prompting; with several, choose one with completion."
+  (interactive)
+  (let ((buffers (my-dsh--current-log-buffers)))
+    (unless buffers
+      (user-error "No DSH log buffer in this workspace"))
+    (let* ((buffer
+            (if (= (length buffers) 1)
+                (car buffers)
+                (let ((choices
+                       (mapcar (lambda (buf)
+                                 (cons (my-dsh--kill-label buf) buf))
+                               buffers)))
+                  (or (cdr (assoc (completing-read "Kill DSH: "
+                                                  choices nil t)
+                                  choices))
+                      (user-error "No DSH session selected")))))
+           (label (my-dsh--kill-label buffer))
+           (session (my-dsh--session-for-buffer buffer)))
+      (when session
+        (my-dsh--cancel-timer session)
+        (if (my-dsh--session-live-p session)
+            (my-dsh-stop (plist-get session :dir))
+          (message "DSH: removing stale log buffer %s" label)))
+      (when (buffer-live-p buffer)
+        (with-current-buffer buffer
+          (set-buffer-modified-p nil))
+        ;; The launcher process is attached to the log buffer; the
+        ;; buffer is being removed deliberately, so do not ask about
+        ;; the still-running process or unsaved log text.
+        (let ((kill-buffer-query-functions nil))
+          (kill-buffer buffer))
+        (message "DSH: killed %s" label)))))
+
+;; ------------------------------------------------------------------
+;; menu: C-c a d
+;; ------------------------------------------------------------------
+
+(transient-define-prefix my-dsh-menu ()
+  "DSH container menu."
+  [["DSH"
+    ("r" "Run / reconnect" my-dsh-open :transient nil)
+    ("k" "Kill in this workspace" my-dsh-kill :transient nil)]])
 
 (provide 'desktop-dsh)
 ;;; desktop-dsh.el ends here

@@ -234,8 +234,10 @@
 ;; 9c. DSH (DeepSeek Harness in a dev container).  Needs the run-dsh
 ;;     launcher on PATH:
 ;;       ln -s ~/sem-dev-container/bins/run-dsh ~/.local/bin/run-dsh
-;;     First use: C-c d  (ask for a folder; dsh-emacs opens when the
-;;     container prints its URL).  M-x my-dsh-open-web for the
+;;     First use: C-c a d r  (ask for a folder; dsh-emacs opens when
+;;     the container prints its URL).  C-c a d k stops the DSH of the
+;;     current workspace (asks when it has several).  C-c d runs the
+;;     single-step command directly.  M-x my-dsh-open-web for the
 ;;     one-time provider/model setup in the browser.
 ;; ------------------------------------------------------------------
 (setq my-desktop-enable-dsh t)

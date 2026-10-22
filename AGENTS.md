@@ -191,7 +191,8 @@ Always include `lexical-binding: t` at the top of every file.
   - `C-c s` - social prefix (b bluesky, h hackernews, l lemmy, r reddit,
     t telegram); `C-c K` - kitsu prefix (d dashboard, s search, t
     trending), bound only when `desktop-kitsu' is loaded;
-    `C-c a` - AI prefix (a chat, d DSH container, f attach file,
+    `C-c a` - AI prefix (a chat, d DSH menu: r run/reconnect and k
+    kill the DSH of this workspace, f attach file,
     h history toggle, o open chat, r rename chat, l search, s save,
     g gptel-menu, z Z-AI usage); `C-c l` - lexicon prefix (t
     transform, p prompt, d download, s status, r remove-last), bound

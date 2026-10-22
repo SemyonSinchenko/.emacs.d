@@ -86,7 +86,7 @@ Only populated when the pomodoro module is loaded.")
                ("s-t" . my-roguelike-story)
                ("s-c" . my-roguelike-chat))
     (ai ("a" . my-ai-chat)            ; open a new chat
-        ("d" . my-dsh-open)           ; DSH container session
+        ("d" . my-dsh-menu)           ; DSH: r run, k kill in this workspace
         ("f" . my-ai-attach-file)     ; attach a file to this chat
         ("h" . my-ai-history-toggle)  ; toggle shared-history indexing
         ("r" . my-ai-session-rename)  ; rename chat (DB title only)
