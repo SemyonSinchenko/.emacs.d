@@ -48,6 +48,8 @@ configurations**:
 │   ├── desktop-torrent.el   # transmission-daemon RPC UI
 │   ├── desktop-comms.el     # Telegram via telega (native or docker TDLib)
 │   ├── desktop-ai.el        # gptel assistant; per-chat folders + ai-chats.db state
+│   ├── desktop-dsh.el       # DSH web launcher + dsh-emacs client (fallback)
+│   ├── desktop-dsh-acp.el   # DSH ACP agents through agent-shell (default)
 │   ├── desktop-edit.el      # JSON/YAML/TOML/Markdown/CSV editing + apheleia
 │   ├── desktop-lexicon.el   # lexicon-org AI text transforms
 │   ├── lang-lsp.el          # Eglot (LSP), treesit-auto, Flymake, Apheleia
@@ -191,8 +193,9 @@ Always include `lexical-binding: t` at the top of every file.
   - `C-c s` - social prefix (b bluesky, h hackernews, l lemmy, r reddit,
     t telegram); `C-c K` - kitsu prefix (d dashboard, s search, t
     trending), bound only when `desktop-kitsu' is loaded;
-    `C-c a` - AI prefix (a chat, d DSH menu: r run/reconnect and k
-    kill the DSH of this workspace, f attach file,
+    `C-c a` - AI prefix (a chat, d DSH menu: r open/focus the ACP
+    agent, k kill it, R restart it, w/W the old dsh-emacs web
+    run/kill; one ACP agent per project; f attach file,
     h history toggle, o open chat, r rename chat, l search, s save,
     g gptel-menu, z Z-AI usage); `C-c l` - lexicon prefix (t
     transform, p prompt, d download, s status, r remove-last), bound

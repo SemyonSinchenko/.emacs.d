@@ -14,22 +14,36 @@
 ;; (`dsh web (host): ...') plus the server's container-side
 ;; `dsh web: .../?token=...' line; the container-side URL itself is
 ;; never connected to (its 3080 port is dead on the host).  Parallel
-;; sessions (different folders) are supported: the `C-c a d' menu's
+;; containers (different folders) are supported: the `C-c a d' menu's
 ;; `r' reconnects to a running one or starts a new one in a chosen
 ;; folder; its `k' stops a session in the current perspective.
+;;
+;; dsh-emacs is a single-server client: one global `dsh-emacs-base-url'
+;; and one global session/workspace cache drive every chat buffer, so
+;; pointing it at a second container while the first is attached mixed
+;; both servers (the session list kept the old container's rows and an
+;; old chat sent its session id to the new server, which answered
+;; "session does not exist").  This module therefore attaches to ONE
+;; container at a time: switching to a different folder closes the
+;; previous container's dsh-emacs chats and drops its caches before the
+;; new URL is installed.  Transcripts stay on their server, so switching
+;; back reopens them from that container's session list.  The containers
+;; themselves keep running; only the Emacs client moves.
 ;;
 ;; Stopping: `k' in the log buffer, `my-dsh-stop', or the `k' entry
 ;; of the `C-c a d' menu closes the launcher's stdin, which the
 ;; container wrapper treats like Ctrl-D (graceful shutdown).  The
 ;; menu's `k' also kills the log buffer and only considers buffers
-;; in the current perspective.  The container keeps its state in
-;; ~/.dsh, so model/provider setup survives restarts.
+;; in the current perspective.  The container keeps its project state
+;; in <project>/.dsh (and shared settings in ~/.dsh), so model/provider
+;; setup survives restarts.
 ;;
 ;; Requires the dsh-emacs package (installed below from GitHub) and
 ;; the `run-dsh' launcher on `exec-path'.
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'desktop-config-defs)
 (require 'project)
 (require 'transient)
@@ -40,11 +54,29 @@
 (declare-function dsh-emacs-open-web "dsh-emacs")
 (declare-function dsh-emacs--server-invalidate-alive "dsh-emacs-server")
 (declare-function dsh-emacs--server-auth-reset "dsh-emacs-server")
+(declare-function dsh-emacs-events-host-disconnect "dsh-emacs-events")
+(declare-function dsh-emacs-events-disconnect "dsh-emacs-events"
+                  (&optional chat))
 (declare-function persp-is-current-buffer "perspective"
                   (buffer &optional include-global))
 (declare-function my-desktop--warn "desktop-init")
 (defvar dsh-emacs-base-url)
 (defvar dsh-emacs-server-auto-start)
+(defvar dsh-emacs-sessions-buffer)
+(defvar dsh-emacs--sessions)
+(defvar dsh-emacs--workspaces)
+(defvar dsh-emacs--archived-sessions)
+(defvar dsh-emacs--agent-presets)
+(defvar dsh-emacs--current-session)
+(defvar dsh-emacs--current-buffer)
+(defvar dsh-emacs--chat-buffers)
+(defvar dsh-emacs--tool-calls)
+(defvar dsh-emacs--activity-groups)
+(defvar dsh-emacs--subagent-catalogs)
+(defvar dsh-emacs--command-catalogs)
+(defvar dsh-emacs--skill-catalogs)
+(defvar dsh-emacs--question-queue)
+(defvar dsh-emacs--approval-queue)
 (defvar persp-mode)
 
 ;; dsh-emacs is GitHub-only (not on MELPA): install it as a VC
@@ -97,6 +129,12 @@ Alist (DIR . PLIST) with PLIST keys :dir :proc :buffer :url :port
 :token :timer.  DIR is the expanded workspace directory; the entry
 is removed when the launcher process exits.")
 
+(defvar my-dsh--attached-dir nil
+  "Directory of the container dsh-emacs is currently attached to, or nil.
+dsh-emacs has one global server address and one session/workspace
+cache, so this module attaches it to one container at a time; see
+`my-dsh--detach'.")
+
 (defconst my-dsh--ready-re
   (concat "^\\(https?://[^/[:space:]]+/\\?token=[^[:space:]]+\\)"
           "[[:space:]]*\n"
@@ -132,6 +170,113 @@ launchers that predate the ready block.")
 (defun my-dsh--session-live-p (session)
   "Non-nil when SESSION's launcher process is still running."
   (and session (process-live-p (plist-get session :proc))))
+
+;; ------------------------------------------------------------------
+;; Attachment: dsh-emacs drives one container at a time
+;; ------------------------------------------------------------------
+
+(defun my-dsh--chat-buffers ()
+  "Return the live dsh-emacs chat buffers, tracked or not."
+  (let (buffers)
+    (when (and (boundp 'dsh-emacs--chat-buffers)
+               (hash-table-p dsh-emacs--chat-buffers))
+      (maphash (lambda (_session buffer)
+                 (when (buffer-live-p buffer)
+                   (push buffer buffers)))
+               dsh-emacs--chat-buffers))
+    (dolist (buffer (buffer-list))
+      (when (and (buffer-live-p buffer)
+                 (with-current-buffer buffer
+                   (derived-mode-p 'dsh-emacs-mode))
+                 (not (memq buffer buffers)))
+        (push buffer buffers)))
+    buffers))
+
+(defun my-dsh--clear-server-state ()
+  "Drop every dsh-emacs cache scoped to the attached server."
+  ;; Chat buffers are closed before this runs, so their session ids are
+  ;; gone too; the caches below are the ones that survive a buffer kill
+  ;; and would otherwise show the previous container's rows.
+  (dolist (variable '(dsh-emacs--sessions
+                      dsh-emacs--workspaces
+                      dsh-emacs--archived-sessions
+                      dsh-emacs--agent-presets
+                      dsh-emacs--current-session
+                      dsh-emacs--current-buffer
+                      dsh-emacs--command-catalogs
+                      dsh-emacs--skill-catalogs
+                      ;; Waterfalls queued by the old server: answering
+                      ;; them after the switch would post stale event ids
+                      ;; to the new one.
+                      dsh-emacs--question-queue
+                      dsh-emacs--approval-queue))
+    (when (boundp variable)
+      (set variable nil)))
+  (dolist (variable '(dsh-emacs--chat-buffers
+                      dsh-emacs--tool-calls
+                      dsh-emacs--activity-groups
+                      dsh-emacs--subagent-catalogs))
+    (when (and (boundp variable)
+               (hash-table-p (symbol-value variable)))
+      (clrhash (symbol-value variable)))))
+
+(defun my-dsh--report-error (context err)
+  "Report ERR that happened while tearing down CONTEXT."
+  (if (fboundp 'my-desktop--warn)
+      (my-desktop--warn "%s: %s" context (error-message-string err))
+    (message "DSH: %s: %s" context (error-message-string err))))
+
+(defun my-dsh--detach ()
+  "Detach dsh-emacs from the container it is currently attached to.
+dsh-emacs keeps one global `dsh-emacs-base-url' and one global
+session/workspace cache: leaving the old chats open while the URL
+points at another container made them send the old session id to
+the new server (\"session does not exist\") and kept the old rows in
+the session list.  Close those chats (their transcripts live on
+their server and come back when it is attached again) and clear the
+server-scoped caches before the next URL is installed."
+  (when (featurep 'dsh-emacs)
+    (let ((dir my-dsh--attached-dir)
+          (chats (my-dsh--chat-buffers)))
+      (unwind-protect
+          (progn
+            (let ((list-buffer (and (boundp 'dsh-emacs-sessions-buffer)
+                                    (get-buffer dsh-emacs-sessions-buffer))))
+              (when (buffer-live-p list-buffer)
+                (condition-case err
+                    (with-current-buffer list-buffer
+                      (when (fboundp 'dsh-emacs-events-host-disconnect)
+                        (dsh-emacs-events-host-disconnect)))
+                  (error
+                   (my-dsh--report-error "DSH host stream teardown" err)))
+                (condition-case err
+                    (let ((kill-buffer-query-functions nil))
+                      (kill-buffer list-buffer))
+                  (error
+                   (my-dsh--report-error "DSH session list teardown" err)))))
+            (dolist (buffer chats)
+              (when (buffer-live-p buffer)
+                (condition-case err
+                    (with-current-buffer buffer
+                      (when (fboundp 'dsh-emacs-events-disconnect)
+                        (dsh-emacs-events-disconnect)))
+                  (error
+                   (my-dsh--report-error "DSH chat stream teardown" err)))
+                (condition-case err
+                    (let ((kill-buffer-query-functions nil))
+                      (kill-buffer buffer))
+                  (error
+                   (my-dsh--report-error "DSH chat buffer teardown" err))))))
+        ;; A cache that survives a failed buffer kill would be served to
+        ;; the next container, so clear it even when teardown signalled.
+        (my-dsh--clear-server-state)
+        (setq my-dsh--attached-dir nil)
+        (when dir
+          (message "DSH: detached from %s%s" dir
+                   (if chats
+                       (format " (closed %d chat buffer%s)" (length chats)
+                               (if (= (length chats) 1) "" "s"))
+                     "")))))))
 
 ;; ------------------------------------------------------------------
 ;; Log buffer
@@ -180,35 +325,55 @@ while the startup notice already fired."
 
 (defun my-dsh--connect (session)
   "Point dsh-emacs at SESSION's URL and open its session list.
-The URL carries the launch token, which dsh-emacs reads itself
-from `dsh-emacs-base-url' (see `dsh-emacs--server-auth-token-from-url')."
+dsh-emacs drives a single container at a time, so when SESSION lives
+in a folder other than the attached one, the old chats and server
+state are torn down first (see `my-dsh--detach').  The URL carries
+the launch token, which dsh-emacs reads itself from
+`dsh-emacs-base-url' (see `dsh-emacs--server-auth-token-from-url')."
   (unless (require 'dsh-emacs nil t)
     (user-error "dsh-emacs is not installed; check the *Warnings* buffer"))
   (unless (plist-get session :url)
     (user-error "DSH in %s has not printed its URL yet; see `%s'"
                 (plist-get session :dir)
                 (buffer-name (plist-get session :buffer))))
-  (setq dsh-emacs-base-url (plist-get session :url))
-  ;; Switching containers invalidates the probe cache and any auth
-  ;; cookie minted for the previous server (dsh-emacs re-mints from
-  ;; the new URL's token on demand; internal but stable API).
-  (when (fboundp 'dsh-emacs--server-invalidate-alive)
-    (dsh-emacs--server-invalidate-alive))
-  (when (fboundp 'dsh-emacs--server-auth-reset)
-    (dsh-emacs--server-auth-reset))
-  ;; Guard against the CLI-install fallback: with the server in a
-  ;; container, `dsh-emacs-server-start' (which `dsh-emacs-list-sessions'
-  ;; calls regardless of `dsh-emacs-server-auto-start') would otherwise
-  ;; try to spawn -- and prompt to npm-install -- a HOST dsh here.
-  (unless (and (fboundp 'dsh-emacs--server-alive-p)
-               (dsh-emacs--server-alive-p))
-    (user-error "DSH in %s is not reachable at %s (probe failed); \
+  (let ((dir (plist-get session :dir))
+        (previous-url dsh-emacs-base-url))
+    ;; Point the probe at the new container before touching the old
+    ;; attachment, and restore the old URL when it is unreachable: a
+    ;; failed switch must not destroy a working client.  The old
+    ;; server's cookie is dropped here so the probe cannot present it
+    ;; to the new server; dsh-emacs re-mints from the URL token when
+    ;; either server is used again.
+    (setq dsh-emacs-base-url (plist-get session :url))
+    (when (fboundp 'dsh-emacs--server-invalidate-alive)
+      (dsh-emacs--server-invalidate-alive))
+    (when (fboundp 'dsh-emacs--server-auth-reset)
+      (dsh-emacs--server-auth-reset))
+    (unless (and (fboundp 'dsh-emacs--server-alive-p)
+                 (dsh-emacs--server-alive-p))
+      (setq dsh-emacs-base-url previous-url)
+      (when (fboundp 'dsh-emacs--server-invalidate-alive)
+        (dsh-emacs--server-invalidate-alive))
+      (user-error "DSH in %s is not reachable at %s (probe failed); \
 check the container and the host port, see `%s'"
-                (plist-get session :dir)
-                (plist-get session :url)
-                (buffer-name (plist-get session :buffer))))
-  (message "DSH: connecting to %s" (plist-get session :url))
-  (dsh-emacs))
+                  dir
+                  (plist-get session :url)
+                  (buffer-name (plist-get session :buffer))))
+    (when (and my-dsh--attached-dir
+               (not (equal dir my-dsh--attached-dir)))
+      (my-dsh--detach))
+    ;; Same container under a new port, or a fresh attachment after the
+    ;; detach above: re-install the URL and drop any auth cookie minted
+    ;; for the previous server (dsh-emacs re-mints from the new URL's
+    ;; token on demand; internal but stable API).
+    (setq dsh-emacs-base-url (plist-get session :url))
+    (when (fboundp 'dsh-emacs--server-invalidate-alive)
+      (dsh-emacs--server-invalidate-alive))
+    (when (fboundp 'dsh-emacs--server-auth-reset)
+      (dsh-emacs--server-auth-reset))
+    (message "DSH: connecting to %s" (plist-get session :url))
+    (dsh-emacs)
+    (setq my-dsh--attached-dir dir)))
 
 (defun my-dsh-open-web ()
   "Open the current DSH session's web UI in a browser.
@@ -311,12 +476,17 @@ process chunks are still found."
           (my-dsh--found-url session))))))
 
 (defun my-dsh--sentinel (proc _event)
-  "Forget PROC's session when the launcher exits."
+  "Forget PROC's session when the launcher exits.
+When the exited container is the attached one, detach dsh-emacs:
+its chats can no longer reach the server and would reconnect-loop
+against a dead port."
   (let ((session (process-get proc 'my-dsh-session)))
     (when session
       (my-dsh--cancel-timer session)
       (setq my-dsh--sessions
             (assoc-delete-all (plist-get session :dir) my-dsh--sessions))
+      (when (equal (plist-get session :dir) my-dsh--attached-dir)
+        (my-dsh--detach))
       (message "DSH session in %s stopped" (plist-get session :dir)))))
 
 (defun my-dsh--cancel-timer (session)
@@ -348,7 +518,11 @@ dsh profile and can take minutes) -- watch `%s', press g there or run \
 sem-dev-container/bins/run-dsh into ~/.local/bin"
                 my-desktop-dsh-command))
   (let* ((name (file-name-nondirectory (directory-file-name dir)))
-         (buf (get-buffer-create (format "*dsh:%s*" name)))
+         ;; Two projects with the same basename must not share one log
+         ;; buffer: erasing it would wipe the other launcher's log and
+         ;; leave its session watching the wrong output.
+         (buf (get-buffer-create
+               (generate-new-buffer-name (format "*dsh:%s*" name))))
          (session (list :dir dir :buffer buf :url nil :host-url nil
                         :port nil :token nil :proc nil :timer nil))
          proc)
@@ -382,7 +556,8 @@ sem-dev-container/bins/run-dsh into ~/.local/bin"
 Closes the launcher's stdin; the container wrapper treats that
 like Ctrl-D and shuts the harness down.  If it is still alive
 after 20s, the launcher process is killed (the container itself
-may then need `podman rm -f')."
+may then need `podman rm -f').  Stopping the attached container
+also detaches dsh-emacs (see `my-dsh--detach')."
   (interactive
    (let ((running (mapcar #'car my-dsh--sessions)))
      (unless running
@@ -396,6 +571,8 @@ may then need `podman rm -f')."
       (user-error "No running DSH session in %s" dir))
     (message "Stopping DSH in %s..." dir)
     (process-send-eof (plist-get session :proc))
+    (when (equal dir my-dsh--attached-dir)
+      (my-dsh--detach))
     (run-with-timer 20 nil
                     (lambda ()
                       (when (my-dsh--session-live-p session)
@@ -410,8 +587,10 @@ may then need `podman rm -f')."
 With a session already running in DIR: connect to it (switching
 `dsh-emacs-base-url' there).  With a starting one: report.  With
 none: start `run-dsh' in DIR, wait for its ready URL block and
-connect.  Several sessions in different folders can run in
-parallel; each container gets its own host port."
+connect.  Several containers in different folders can run in
+parallel; each gets its own host port, but dsh-emacs attaches to
+only one at a time and switching containers closes the previous
+one's chats (see `my-dsh--detach')."
   (interactive
    (progn
      (require 'project)

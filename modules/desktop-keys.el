@@ -12,6 +12,14 @@
 (require 'desktop-config-defs)
 (require 'desktop-core)
 
+;; ace-window: swap the current window with any other one on C-x M-o.
+;; M-o / C-x o stay the standard window switches; only swapping is
+;; added here, and the package is loaded on first use.
+(use-package ace-window
+  :ensure t
+  :defer t
+  :commands (ace-swap-window))
+
 ;; Workspaces live under the C-c w prefix (perspective-map): press
 ;; C-c w and which-key lists everything -- s switch/create, r rename,
 ;; c close, n/p or <right>/<left> cycle, 1..9/0 by position,
@@ -54,9 +62,21 @@ Only populated when the pomodoro module is loaded.")
 ;; desktop-roguelike.el, which loads before this file.
 (defvar my-roguelike-keymap)
 
+(defun my-dsh-menu-dispatch ()
+  "Open the DSH menu: ACP by default, old web as fallback.
+The ACP menu keeps the old dsh-emacs commands under `w' / `W'."
+  (interactive)
+  (cond
+   ((fboundp 'my-dsh-acp-menu)
+    (call-interactively #'my-dsh-acp-menu))
+   ((fboundp 'my-dsh-menu)
+    (call-interactively #'my-dsh-menu))
+   (t (user-error "No DSH integration is loaded"))))
+
 (defconst my-desktop--default-keys
   '((global ("C-x b" . persp-switch-to-buffer*) ; buffers of this workspace
             ("C-x k" . persp-kill-buffer*)      ; kill within workspace
+            ("C-x M-o" . ace-swap-window)       ; swap windows by ace label
             ("C-c `" . my-sidebar-toggle)       ; treemacs file tree
             ("C-c m" . my-sync-menu)
             ("C-c t" . my-project-terminal)
@@ -86,7 +106,7 @@ Only populated when the pomodoro module is loaded.")
                ("s-t" . my-roguelike-story)
                ("s-c" . my-roguelike-chat))
     (ai ("a" . my-ai-chat)            ; open a new chat
-        ("d" . my-dsh-menu)           ; DSH: r run, k kill in this workspace
+        ("d" . my-dsh-menu-dispatch)  ; DSH: r ACP run, k ACP kill, w/W web
         ("f" . my-ai-attach-file)     ; attach a file to this chat
         ("h" . my-ai-history-toggle)  ; toggle shared-history indexing
         ("r" . my-ai-session-rename)  ; rename chat (DB title only)
@@ -213,6 +233,8 @@ Only populated when the pomodoro module is loaded.")
      :if (lambda () (fboundp 'my-ai-chat)))
     ("D" "DSH container" my-dsh-open
      :if (lambda () (fboundp 'my-dsh-open)))
+    ("A" "DSH ACP agent" my-dsh-acp-open
+     :if (lambda () (fboundp 'my-dsh-acp-open)))
     ("z" "AI usage" my-ai-usage
      :if (lambda () (fboundp 'my-ai-usage)))
     ("l" "Lexicon transform" lexicon-org-transform

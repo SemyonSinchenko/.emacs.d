@@ -716,6 +716,41 @@ can take minutes; later starts answer in seconds."
   :type 'integer
   :group 'my-desktop)
 
+(defcustom my-desktop-enable-dsh-acp t
+  "Load desktop-dsh-acp: ACP agents through agent-shell.
+Needs `agent-shell' (installed from MELPA) and the `run-dsh'
+launcher with `--acp' support (sem-dev-container).  The old
+dsh-emacs web integration stays available under `w' / `W' in the
+`C-c a d' menu and through `C-c d'."
+  :type 'boolean
+  :group 'my-desktop)
+
+(defcustom my-desktop-dsh-acp-command '("run-dsh" "--acp")
+  "Command that starts the DSH ACP server over stdio.
+The first element is resolved on `exec-path'; the rest are its
+arguments.  run-dsh owns the container, project directory and
+environment; do not add a port or token here."
+  :type '(repeat string)
+  :group 'my-desktop)
+
+(defcustom my-desktop-dsh-acp-session-strategy 'prompt
+  "How a new DSH ACP shell chooses its session.
+`prompt' resumes an existing session from this project's ACP
+session list or starts a new one; `latest' resumes the newest;
+`new' always starts a new session."
+  :type '(choice (const :tag "Prompt for a session" prompt)
+                 (const :tag "Resume the latest" latest)
+                 (const :tag "Always start new" new))
+  :group 'my-desktop)
+
+(defcustom my-desktop-dsh-acp-default-config-options nil
+  "Default ACP config options for new DSH ACP sessions.
+An alist of (OPTION . VALUE), for example model or
+reasoning_effort.  Passed to agent-shell as the agent config's
+default options."
+  :type '(alist :key-type string :value-type string)
+  :group 'my-desktop)
+
 ;; ------------------------------------------------------------------
 ;; Roguelike copilot (NetHack etc.)
 ;; ------------------------------------------------------------------

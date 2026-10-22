@@ -234,13 +234,20 @@
 ;; 9c. DSH (DeepSeek Harness in a dev container).  Needs the run-dsh
 ;;     launcher on PATH:
 ;;       ln -s ~/sem-dev-container/bins/run-dsh ~/.local/bin/run-dsh
-;;     First use: C-c a d r  (ask for a folder; dsh-emacs opens when
-;;     the container prints its URL).  C-c a d k stops the DSH of the
-;;     current workspace (asks when it has several).  C-c d runs the
-;;     single-step command directly.  M-x my-dsh-open-web for the
-;;     one-time provider/model setup in the browser.
+;;     Default: C-c a d r opens/focuses the ACP agent for this
+;;     perspective through agent-shell (run-dsh --acp); C-c a d k
+;;     stops it and C-c a d R restarts it.  One agent per project.
+;;     Old dsh-emacs web setup is still loaded: C-c a d w / W run and
+;;     kill it, C-c d runs my-dsh-open directly, and
+;;     M-x my-dsh-open-web opens the browser setup page.
+;;     dsh-emacs attaches to one container at a time: w in a different
+;;     folder closes the previous container's chats.
 ;; ------------------------------------------------------------------
 (setq my-desktop-enable-dsh t)
+(setq my-desktop-enable-dsh-acp t)
+;; (setq my-desktop-dsh-acp-session-strategy 'latest) ; or 'new
+;; (setq my-desktop-dsh-acp-default-config-options
+;;       '(("reasoning_effort" . "max")))
 
 ;; ------------------------------------------------------------------
 ;; 10. Home tab

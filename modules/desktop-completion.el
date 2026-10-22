@@ -2,7 +2,9 @@
 
 ;;; Commentary:
 ;; Same Vertico/Consult stack as the IDE config (minus code
-;; completion, which belongs to the IDE, not the desktop).
+;; completion, which belongs to the IDE, not the desktop).  In-buffer
+;; CAPF goes through Consult, so agent-shell's @file and /command
+;; completion uses the same Vertico UI as the minibuffer.
 
 ;;; Code:
 
@@ -49,6 +51,14 @@
    :map minibuffer-local-map
    ("M-s" . consult-history)
    ("M-r" . consult-history)))
+
+;; In-buffer CAPF (agent-shell's @file and /command, org tags, ...)
+;; uses the same Vertico minibuffer as every other Desktop completion.
+;; This replaces Emacs's default *Completions* UI, where TAB does not
+;; insert the selected candidate.  With Vertico, TAB is
+;; `vertico-insert', so it accepts the current selection.
+(when (fboundp 'consult-completion-in-region)
+  (setq completion-in-region-function #'consult-completion-in-region))
 
 (use-package embark
   :ensure t
