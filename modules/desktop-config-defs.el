@@ -737,7 +737,8 @@ environment; do not add a port or token here."
   "How a new DSH ACP shell chooses its session.
 `prompt' resumes an existing session from this project's ACP
 session list or starts a new one; `latest' resumes the newest;
-`new' always starts a new session."
+`new' always starts a new session.  The `C-c a d o/l/s' session
+commands pass an explicit id and bypass this strategy."
   :type '(choice (const :tag "Prompt for a session" prompt)
                  (const :tag "Resume the latest" latest)
                  (const :tag "Always start new" new))

@@ -194,16 +194,17 @@ Always include `lexical-binding: t` at the top of every file.
   - `C-c s` - social prefix (b bluesky, h hackernews, l lemmy, r reddit,
     t telegram); `C-c K` - kitsu prefix (d dashboard, s search, t
     trending), bound only when `desktop-kitsu' is loaded;
-    `C-c a` - AI prefix (a chat, d DSH menu: r open/focus the ACP
-    agent, k kill it, R restart it, n clear its buffer, f send a file,
-    w/W the old dsh-emacs web run/kill; one ACP agent per project;
-    f attach file, h history toggle, o open chat, r rename chat,
-    l search, s save, g gptel-menu, z Z-AI usage); `C-c l` - lexicon
-    prefix (t transform, p prompt, d download, s status, r remove-last),
-    bound only when `desktop-lexicon' is loaded; `C-c o` - org prefix
-    (a agenda, t todo list; `p` nested pomodoro prefix: p transient,
-    s/S/P start/stop/pause, c context, m modeline toggle) with the
-    pomodoro sub-keys bound only when `desktop-pomodoro' is loaded.
+    `C-c a` - AI prefix (a chat; d DSH menu [r open/focus the ACP
+    agent, o resume by session ID, l list project sessions, s search
+    project transcripts, k kill it, R restart it, n clear its buffer,
+    f send a file, w/W the old dsh-emacs web run/kill]; one ACP agent
+    per project; f attach file, h history toggle, o open chat,
+    r rename chat, l search, s save, g gptel-menu, z Z-AI usage);
+    `C-c l` - lexicon prefix (t transform, p prompt, d download, s status,
+    r remove-last), bound only when `desktop-lexicon' is loaded;
+    `C-c o` - org prefix (a agenda, t todo list; `p` nested pomodoro prefix:
+    p transient, s/S/P start/stop/pause, c context, m modeline toggle) with
+    the pomodoro sub-keys bound only when `desktop-pomodoro' is loaded.
   - `C-c b` - project prefix (`b` list/open a project workspace, `a` add
     a project, `s` built-in project switch dispatcher). `C-c t` opens a new
     terminal at the current project perspective's root; `C-c T` prompts for

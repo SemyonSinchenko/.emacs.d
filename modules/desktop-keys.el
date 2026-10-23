@@ -106,7 +106,7 @@ The ACP menu keeps the old dsh-emacs commands under `w' / `W'."
                ("s-t" . my-roguelike-story)
                ("s-c" . my-roguelike-chat))
     (ai ("a" . my-ai-chat)            ; open a new chat
-        ("d" . my-dsh-menu-dispatch)  ; DSH: r ACP run, k ACP kill, w/W web
+        ("d" . my-dsh-menu-dispatch)  ; DSH menu: r/o/l/s/k, w/W web
         ("f" . my-ai-attach-file)     ; attach a file to this chat
         ("h" . my-ai-history-toggle)  ; toggle shared-history indexing
         ("r" . my-ai-session-rename)  ; rename chat (DB title only)

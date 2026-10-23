@@ -235,8 +235,11 @@
 ;;     launcher on PATH:
 ;;       ln -s ~/sem-dev-container/bins/run-dsh ~/.local/bin/run-dsh
 ;;     Default: C-c a d r opens/focuses the ACP agent for this
-;;     perspective through agent-shell (run-dsh --acp); C-c a d k
-;;     stops it and C-c a d R restarts it.  One agent per project.
+;;     perspective through agent-shell (run-dsh --acp); C-c a d o
+;;     resumes a session by ID, C-c a d l lists this project's
+;;     sessions (date | id | first message), and C-c a d s searches
+;;     this project's transcripts with Consult.  C-c a d k stops the
+;;     agent and C-c a d R restarts it.  One agent per project.
 ;;     Old dsh-emacs web setup is still loaded: C-c a d w / W run and
 ;;     kill it, C-c d runs my-dsh-open directly, and
 ;;     M-x my-dsh-open-web opens the browser setup page.
