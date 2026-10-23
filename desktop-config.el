@@ -246,8 +246,12 @@
 (setq my-desktop-enable-dsh t)
 (setq my-desktop-enable-dsh-acp t)
 ;; (setq my-desktop-dsh-acp-session-strategy 'latest) ; or 'new
-;; (setq my-desktop-dsh-acp-default-config-options
-;;       '(("reasoning_effort" . "max")))
+
+;; Default model for new DSH ACP sessions.  The ACP "model" option takes
+;; the opaque provider/model pair from DSH's model list, not the bare id:
+;;   ["deepseek-official","deepseek-flash"]
+(setq my-desktop-dsh-acp-default-config-options
+      '(("model" . "[\"deepseek-official\",\"deepseek-flash\"]")))
 
 ;; ------------------------------------------------------------------
 ;; 10. Home tab

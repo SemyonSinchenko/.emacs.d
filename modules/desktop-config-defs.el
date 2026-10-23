@@ -747,7 +747,11 @@ session list or starts a new one; `latest' resumes the newest;
   "Default ACP config options for new DSH ACP sessions.
 An alist of (OPTION . VALUE), for example model or
 reasoning_effort.  Passed to agent-shell as the agent config's
-default options."
+default options.
+
+The DSH `model' option expects the opaque provider/model pair from
+its model list, as a JSON array string, for example
+\"[\\\"deepseek-official\\\",\\\"deepseek-flash\\\"]\"."
   :type '(alist :key-type string :value-type string)
   :group 'my-desktop)
 
