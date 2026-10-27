@@ -37,6 +37,7 @@
 (require 'mailcap)
 (require 'url)
 (require 'seq)
+(require 'map)
 (require 'desktop-config-defs)
 (require 'desktop-core)
 
@@ -1073,7 +1074,8 @@ alone.  Resume saved sessions with `my-ai-session-open'."
     buf))
 
 ;; ------------------------------------------------------------------
-;; AI usage dashboard (C-c a z): Z-AI plan + DeepSeek account
+;; AI usage dashboard (C-c a z): Z-AI plan + DeepSeek account,
+;; Claude subscription limits in a column on the right
 ;; ------------------------------------------------------------------
 ;; https://api.z.ai/api/monitor/usage/quota/limit ->
 ;;   limits: (type "TOKENS_LIMIT" unit 3 number 5) = 5-hour window,
@@ -1329,24 +1331,200 @@ TIME defaults to now and is interpreted in UTC."
            (my-ai-deepseek--pricing-line))
      "\n")))
 
+;; https://api.anthropic.com/api/oauth/usage (undocumented; the endpoint
+;; behind Claude Code /usage).  Auth is the subscription OAuth token
+;; plus `anthropic-beta: oauth-2025-04-20'; a Console API key does not
+;; work.  Response ->
+;;   limits: [{kind "session"|"weekly_all"|"weekly_scoped", percent,
+;;             resets_at ISO-8601, scope {model {display_name}}}],
+;;   five_hour / seven_day / seven_day_opus / seven_day_sonnet:
+;;             {utilization, resets_at} (older shape, used as fallback),
+;;   extra_usage: {is_enabled, used_credits, monthly_limit,
+;;                 decimal_places, currency}.
+;; The token is only read: Claude Code (host or run-claude container)
+;; refreshes ~/.claude/.credentials.json whenever it runs.
+
+(defconst my-ai-claude--refresh-hint
+  "OAuth token expired; run claude once to refresh it"
+  "Message shown when the Claude subscription token is stale.")
+
+(defun my-ai-claude--credentials ()
+  "Return the `claudeAiOauth' alist of the Claude Code credentials."
+  (let ((file (expand-file-name my-desktop-ai-claude-credentials-file)))
+    (unless (file-readable-p file)
+      (user-error "Claude usage: no %s; run claude /login" file))
+    (or (alist-get 'claudeAiOauth
+                   (json-parse-string
+                    (with-temp-buffer
+                      (insert-file-contents file)
+                      (buffer-string))
+                    :object-type 'alist :array-type 'list
+                    :null-object nil :false-object nil))
+        (user-error "Claude usage: no OAuth login in %s" file))))
+
+(defun my-ai-claude--token ()
+  "Return (TOKEN . CREDENTIALS) for the Claude usage endpoint.
+CREDENTIALS is nil when the token comes from
+`my-desktop-ai-claude-oauth-token-env'."
+  (let ((env (getenv my-desktop-ai-claude-oauth-token-env)))
+    (if (and env (not (string-empty-p env)))
+        (cons env nil)
+      (let* ((creds (my-ai-claude--credentials))
+             (token (alist-get 'accessToken creds))
+             (expires (alist-get 'expiresAt creds)))
+        (unless (stringp token)
+          (user-error "Claude usage: no access token; run claude /login"))
+        (when (and (numberp expires) (< (/ expires 1000.0) (float-time)))
+          (user-error "Claude usage: %s" my-ai-claude--refresh-hint))
+        (cons token creds)))))
+
+(defun my-ai-claude--request (token)
+  "GET the Claude subscription usage with TOKEN; return the parsed JSON."
+  (let* ((url-request-extra-headers
+          `(("Authorization" . ,(concat "Bearer " token))
+            ("anthropic-beta" . "oauth-2025-04-20")
+            ("Accept" . "application/json")))
+         (resp (my-ai--http-body my-desktop-ai-claude-usage-url)))
+    (unless resp
+      (user-error "Claude usage: request failed (no response)"))
+    (when (= (car resp) 401)
+      (user-error "Claude usage: %s" my-ai-claude--refresh-hint))
+    (unless (= (car resp) 200)
+      (user-error "Claude usage: HTTP %d" (car resp)))
+    (json-parse-string (cdr resp) :object-type 'alist :array-type 'list
+                       :null-object nil :false-object nil)))
+
+(defun my-ai-claude--reset-in (iso)
+  "Humanize the ISO-8601 time ISO into a reset countdown, or nil."
+  (when-let* ((time (and (stringp iso)
+                         (ignore-errors (date-to-time iso)))))
+    (my-ai-zai--reset-in (* 1000 (float-time time)))))
+
+(defun my-ai-claude--limit-rows (data)
+  "Return the limit rows of usage DATA as (LABEL PERCENT RESETS-AT)."
+  (if-let* ((limits (alist-get 'limits data)))
+      (mapcar
+       (lambda (limit)
+         (let ((kind (alist-get 'kind limit))
+               (scope (alist-get 'scope limit)))
+           (list (pcase kind
+                   ("session" "5h")
+                   ("weekly_all" "week")
+                   (_ (truncate-string-to-width
+                       (format "%s"
+                               (or (map-nested-elt scope
+                                                   '(model display_name))
+                                   (alist-get 'surface scope)
+                                   kind))
+                       5)))
+                 (alist-get 'percent limit)
+                 (alist-get 'resets_at limit))))
+       limits)
+    (delq nil
+          (mapcar (lambda (pair)
+                    (when-let* ((entry (alist-get (car pair) data))
+                                (pct (alist-get 'utilization entry)))
+                      (list (cdr pair) pct (alist-get 'resets_at entry))))
+                  '((five_hour . "5h") (seven_day . "week")
+                    (seven_day_opus . "opus") (seven_day_sonnet . "son."))))))
+
+(defun my-ai-claude--limit-line (row)
+  "Format one limit ROW like the Z-AI quota rows."
+  (pcase-let ((`(,label ,pct ,resets) row))
+    (format "%-5s %s %3d%%%s"
+            label
+            (my-ai-zai--bar pct)
+            (round (or pct 0))
+            (if-let* ((in (my-ai-claude--reset-in resets)))
+                (concat "  resets in " in)
+              ""))))
+
+(defun my-ai-claude--extra-line (data)
+  "Return the extra-usage (paid overflow) line of usage DATA."
+  (let* ((extra (alist-get 'extra_usage data))
+         (scale (expt 10.0 (or (alist-get 'decimal_places extra) 0)))
+         (used (alist-get 'used_credits extra))
+         (limit (alist-get 'monthly_limit extra)))
+    (cond
+     ((not (eq (alist-get 'is_enabled extra) t)) "extra usage  off")
+     ((and (numberp used) (numberp limit))
+      (format "extra usage  on, %.2f of %.2f %s"
+              (/ used scale) (/ limit scale)
+              (or (alist-get 'currency extra) "")))
+     (t "extra usage  on"))))
+
+(defun my-ai-claude--dashboard ()
+  "Build the Claude subscription limits dashboard text."
+  (let* ((auth (my-ai-claude--token))
+         (creds (cdr auth))
+         (plan (alist-get 'subscriptionType creds))
+         (tier (alist-get 'rateLimitTier creds))
+         (mult (and (stringp tier)
+                    (string-match "_\\([0-9]+x\\)\\'" tier)
+                    (match-string 1 tier)))
+         (data (my-ai-claude--request (car auth)))
+         (rows (my-ai-claude--limit-rows data)))
+    (string-join
+     (append
+      (list (concat "Claude subscription"
+                    (if plan
+                        (format " (%s%s)" plan (if mult (concat " " mult) ""))
+                      "")))
+      (if rows
+          (mapcar #'my-ai-claude--limit-line rows)
+        (list "limits  (not reported)"))
+      (list (my-ai-claude--extra-line data)))
+     "\n")))
+
 (defun my-ai-usage--section (fn)
   "Call FN and return its text; on error return an ERROR line."
   (condition-case err
       (funcall fn)
     (error (format "ERROR: %s" (error-message-string err)))))
 
+(defconst my-ai-usage--separator
+  "========================================"
+  "Line between the stacked dashboard sections.")
+
+(defun my-ai-usage--columns (left right)
+  "Put the RIGHT text block beside the LEFT one, or nil if too wide.
+Each LEFT line is padded to the widest one; the frame width decides
+whether the result fits without wrapping."
+  (let* ((left-lines (split-string left "\n"))
+         (right-lines (split-string right "\n"))
+         (width (apply #'max (mapcar #'string-width left-lines)))
+         (right-width (apply #'max (mapcar #'string-width right-lines)))
+         (rows (max (length left-lines) (length right-lines))))
+    (when (< (+ width 3 right-width) (frame-width))
+      (mapconcat
+       (lambda (idx)
+         (string-trim-right
+          (concat (string-pad (or (nth idx left-lines) "") width)
+                  " │ "
+                  (or (nth idx right-lines) ""))))
+       (number-sequence 0 (1- rows))
+       "\n"))))
+
 (defun my-ai-usage--dashboard ()
-  "Build the combined Z-AI and DeepSeek usage dashboard text."
-  (string-join
-   (list (my-ai-usage--section #'my-ai-zai-usage--dashboard)
-         ""
-         "============================================================"
-         ""
-         (my-ai-usage--section #'my-ai-deepseek--dashboard))
-   "\n"))
+  "Build the usage dashboard: Z-AI and DeepSeek, Claude on the right.
+The Claude column falls back to a stacked section when the frame is
+too narrow; `my-desktop-ai-enable-claude-usage' turns it off."
+  (let ((left (string-join
+               (list (my-ai-usage--section #'my-ai-zai-usage--dashboard)
+                     ""
+                     my-ai-usage--separator
+                     ""
+                     (my-ai-usage--section #'my-ai-deepseek--dashboard))
+               "\n")))
+    (if (not my-desktop-ai-enable-claude-usage)
+        left
+      (let ((right (my-ai-usage--section #'my-ai-claude--dashboard)))
+        (or (my-ai-usage--columns left right)
+            (string-join (list left "" my-ai-usage--separator "" right)
+                         "\n"))))))
 
 (defun my-ai-usage ()
-  "Show Z-AI plan and DeepSeek account usage in the minibuffer."
+  "Show Z-AI, DeepSeek and Claude subscription usage in the minibuffer."
   (interactive)
   (message "%s" (my-ai-usage--dashboard)))
 

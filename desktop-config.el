@@ -213,11 +213,17 @@
 (setq my-desktop-ai-history-default nil)     ; opt in per chat
 
 ;; AI usage dashboard (C-c a z): Z-AI coding plan + DeepSeek
-;; balance.  Keys come from the environment variables named below:
+;; balance, with Claude subscription limits in a column on the right.
+;; Keys come from the environment variables named below; Claude reads
+;; the Claude Code login (OAuth token, refreshed whenever claude runs):
 (setq my-desktop-ai-zai-api-url "https://api.z.ai")
 (setq my-desktop-ai-zai-api-key-env "ZAI_API_KEY")
 (setq my-desktop-ai-deepseek-api-url "https://api.deepseek.com")
 (setq my-desktop-ai-deepseek-api-key-env "DEEPSEEK_API_KEY")
+(setq my-desktop-ai-enable-claude-usage t)
+(setq my-desktop-ai-claude-credentials-file "~/.claude/.credentials.json")
+;; A long-lived token from `claude setup-token' wins when this is set:
+(setq my-desktop-ai-claude-oauth-token-env "CLAUDE_CODE_OAUTH_TOKEN")
 
 ;; ------------------------------------------------------------------
 ;; 9b. Roguelike copilot
@@ -231,30 +237,33 @@
 ;; (setq my-desktop-roguelike-model 'deepseek-v4-flash)
 
 ;; ------------------------------------------------------------------
-;; 9c. DSH (DeepSeek Harness in a dev container).  Needs the run-dsh
-;;     launcher on PATH:
+;; 9c. ACP agents in dev containers: DSH (DeepSeek Harness) and
+;;     Claude Code.  Needs the launchers on PATH:
 ;;       ln -s ~/sem-dev-container/bins/run-dsh ~/.local/bin/run-dsh
-;;     Default: C-c a d r opens/focuses the ACP agent for this
-;;     perspective through agent-shell (run-dsh --acp); C-c a d o
+;;       ln -s ~/sem-dev-container/bins/run-claude ~/.local/bin/run-claude
+;;     C-c a d r asks DSH or Claude, then opens/focuses that agent for
+;;     this perspective through agent-shell (run-dsh / run-claude
+;;     --acp); a new shell always starts a new session.  C-c a d o
 ;;     resumes a session by ID, C-c a d l lists this project's
-;;     sessions (date | id | first message), and C-c a d s searches
-;;     this project's transcripts with Consult.  C-c a d k stops the
-;;     agent and C-c a d R restarts it.  One agent per project.
-;;     Old dsh-emacs web setup is still loaded: C-c a d w / W run and
-;;     kill it, C-c d runs my-dsh-open directly, and
+;;     sessions of both harnesses (date | harness | id | first
+;;     message), and C-c a d s searches the transcripts with Consult.
+;;     C-c a d k / R / n / f kill, restart, clear or send a file to an
+;;     agent (asks which only when both run).  One agent per project
+;;     and harness.
+;;     Old dsh-emacs web setup is still loaded but not in the menu:
+;;     C-c d runs my-dsh-open, M-x my-dsh-kill stops it, and
 ;;     M-x my-dsh-open-web opens the browser setup page.
-;;     dsh-emacs attaches to one container at a time: w in a different
-;;     folder closes the previous container's chats.
 ;; ------------------------------------------------------------------
 (setq my-desktop-enable-dsh t)
 (setq my-desktop-enable-dsh-acp t)
-;; (setq my-desktop-dsh-acp-session-strategy 'latest) ; or 'new
 
 ;; Default model for new DSH ACP sessions.  The ACP "model" option takes
 ;; the opaque provider/model pair from DSH's model list, not the bare id:
 ;;   ["deepseek-official","deepseek-flash"]
 (setq my-desktop-dsh-acp-default-config-options
       '(("model" . "[\"deepseek-official\",\"deepseek-flash\"]")))
+;; Default ACP config options for new Claude sessions, same shape:
+;; (setq my-desktop-claude-acp-default-config-options '(("model" . "...")))
 
 ;; ------------------------------------------------------------------
 ;; 10. Home tab

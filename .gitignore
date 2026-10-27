@@ -78,5 +78,7 @@ lem.plstore
 roguelike/
 .kitsuauth
 
-# DSH
+# AI/ACP
 .dsh
+.agent-shell
+.claude-container

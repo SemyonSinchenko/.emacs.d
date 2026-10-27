@@ -63,8 +63,7 @@ Only populated when the pomodoro module is loaded.")
 (defvar my-roguelike-keymap)
 
 (defun my-dsh-menu-dispatch ()
-  "Open the DSH menu: ACP by default, old web as fallback.
-The ACP menu keeps the old dsh-emacs commands under `w' / `W'."
+  "Open the ACP agents menu (DSH / Claude); old DSH web as fallback."
   (interactive)
   (cond
    ((fboundp 'my-dsh-acp-menu)
@@ -106,7 +105,7 @@ The ACP menu keeps the old dsh-emacs commands under `w' / `W'."
                ("s-t" . my-roguelike-story)
                ("s-c" . my-roguelike-chat))
     (ai ("a" . my-ai-chat)            ; open a new chat
-        ("d" . my-dsh-menu-dispatch)  ; DSH menu: r/o/l/s/k, w/W web
+        ("d" . my-dsh-menu-dispatch)  ; DSH/Claude ACP menu: r/o/l/s/k
         ("f" . my-ai-attach-file)     ; attach a file to this chat
         ("h" . my-ai-history-toggle)  ; toggle shared-history indexing
         ("r" . my-ai-session-rename)  ; rename chat (DB title only)
@@ -114,7 +113,7 @@ The ACP menu keeps the old dsh-emacs commands under `w' / `W'."
         ("g" . gptel-menu)            ; gptel settings menu
         ("l" . my-ai-session-search)  ; search transcripts (grep)
         ("s" . my-ai-session-save)    ; save chat now
-        ("z" . my-ai-usage))          ; Z-AI plan + DeepSeek balance
+        ("z" . my-ai-usage))          ; Z-AI + DeepSeek + Claude usage
     (lexicon ("t" . lexicon-org-transform)        ; transform region
              ("p" . lexicon-org-transform-prompt) ; prompt for transform
              ("d" . lexicon-org-download)         ; download model

@@ -659,6 +659,30 @@ The tool result states the offset to continue from."
   :type 'string
   :group 'my-desktop)
 
+(defcustom my-desktop-ai-enable-claude-usage t
+  "Show the Claude subscription limits column in `my-ai-usage' (C-c a z)."
+  :type 'boolean
+  :group 'my-desktop)
+
+(defcustom my-desktop-ai-claude-usage-url
+  "https://api.anthropic.com/api/oauth/usage"
+  "Claude subscription usage endpoint (the one behind Claude Code /usage).
+Undocumented; it takes the subscription OAuth token, not an API key."
+  :type 'string
+  :group 'my-desktop)
+
+(defcustom my-desktop-ai-claude-credentials-file "~/.claude/.credentials.json"
+  "Claude Code credentials file holding the subscription OAuth token.
+Only read, never written: Claude Code refreshes the token when it runs."
+  :type 'file
+  :group 'my-desktop)
+
+(defcustom my-desktop-ai-claude-oauth-token-env "CLAUDE_CODE_OAUTH_TOKEN"
+  "Environment variable with a Claude OAuth token (e.g. `claude setup-token').
+When set, it is used instead of `my-desktop-ai-claude-credentials-file'."
+  :type 'string
+  :group 'my-desktop)
+
 (defcustom my-desktop-ai-deepseek-api-url "https://api.deepseek.com"
   "Base URL of the DeepSeek API (account balance, C-c a z)."
   :type 'string
@@ -717,11 +741,11 @@ can take minutes; later starts answer in seconds."
   :group 'my-desktop)
 
 (defcustom my-desktop-enable-dsh-acp t
-  "Load desktop-dsh-acp: ACP agents through agent-shell.
-Needs `agent-shell' (installed from MELPA) and the `run-dsh'
-launcher with `--acp' support (sem-dev-container).  The old
-dsh-emacs web integration stays available under `w' / `W' in the
-`C-c a d' menu and through `C-c d'."
+  "Load desktop-dsh-acp: DSH / Claude ACP agents through agent-shell.
+Needs `agent-shell' (installed from MELPA) and the `run-dsh' /
+`run-claude' launchers with `--acp' support (sem-dev-container).
+The `C-c a d' menu asks which harness to use.  The old dsh-emacs
+web integration stays available through `C-c d'."
   :type 'boolean
   :group 'my-desktop)
 
@@ -733,17 +757,6 @@ environment; do not add a port or token here."
   :type '(repeat string)
   :group 'my-desktop)
 
-(defcustom my-desktop-dsh-acp-session-strategy 'prompt
-  "How a new DSH ACP shell chooses its session.
-`prompt' resumes an existing session from this project's ACP
-session list or starts a new one; `latest' resumes the newest;
-`new' always starts a new session.  The `C-c a d o/l/s' session
-commands pass an explicit id and bypass this strategy."
-  :type '(choice (const :tag "Prompt for a session" prompt)
-                 (const :tag "Resume the latest" latest)
-                 (const :tag "Always start new" new))
-  :group 'my-desktop)
-
 (defcustom my-desktop-dsh-acp-default-config-options nil
   "Default ACP config options for new DSH ACP sessions.
 An alist of (OPTION . VALUE), for example model or
@@ -753,6 +766,22 @@ default options.
 The DSH `model' option expects the opaque provider/model pair from
 its model list, as a JSON array string, for example
 \"[\\\"deepseek-official\\\",\\\"deepseek-flash\\\"]\"."
+  :type '(alist :key-type string :value-type string)
+  :group 'my-desktop)
+
+(defcustom my-desktop-claude-acp-command '("run-claude" "--acp")
+  "Command that starts the Claude Code ACP server over stdio.
+The first element is resolved on `exec-path'; the rest are its
+arguments.  run-claude owns the container, project directory,
+credentials and environment."
+  :type '(repeat string)
+  :group 'my-desktop)
+
+(defcustom my-desktop-claude-acp-default-config-options nil
+  "Default ACP config options for new Claude ACP sessions.
+An alist of (OPTION . VALUE), passed to agent-shell as the agent
+config's default options, like
+`my-desktop-dsh-acp-default-config-options'."
   :type '(alist :key-type string :value-type string)
   :group 'my-desktop)
 
