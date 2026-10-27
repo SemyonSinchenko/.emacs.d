@@ -258,7 +258,7 @@ open per-machine startup content."
   :group 'my-desktop)
 
 ;; ------------------------------------------------------------------
-;; 3b. Git / Magit commits
+;; 3b. Git: Magit commits, difftastic diffs
 ;; ------------------------------------------------------------------
 
 (defcustom my-desktop-magit-inline-diff nil
@@ -279,6 +279,12 @@ demand.  Nil disables both guards.  Sizes are compared in characters;
 the staged-diff check stops git after one character more than the
 limit."
   :type '(choice natnum (const nil))
+  :group 'my-desktop)
+
+(defcustom my-desktop-difftastic-executable "difft"
+  "Difftastic executable used by the C-c g diff commands.
+A command name looked up in `exec-path', or an absolute path."
+  :type 'string
   :group 'my-desktop)
 
 ;; ------------------------------------------------------------------

@@ -4,6 +4,11 @@
 ;; Built-in project.el projects mapped to perspective.el workspaces.
 ;; Opening a project creates its perspective on demand and initializes
 ;; it once with a ghostel terminal on the left and Magit on the right.
+;;
+;; C-c g: Magit status plus difftastic (difft) views of the uncommitted
+;; changes -- staged, unstaged, both, or one picked changed file.  The
+;; diff opens maximized over the whole frame, side windows included
+;; (side-by-side needs the width); `q' restores the layout it replaced.
 
 ;;; Code:
 
@@ -326,6 +331,206 @@ In a normal workspace, retain `my-term-new' fallback directory behavior."
   (unless (fboundp 'my-term-new)
     (user-error "The ghostel terminal module is disabled"))
   (my-term-new (my-project-current-root)))
+
+;;; Git status and difftastic diffs (C-c g)
+
+(defvar difftastic-executable)
+(defvar difftastic-mode-map)
+(defvar difftastic-display-buffer-function)
+(defvar difftastic-requested-window-width-function)
+(declare-function difftastic-git-diff-range "difftastic"
+                  (&optional rev-or-range args files))
+(declare-function difftastic-files "difftastic"
+                  (file-A file-B &optional lang-override))
+(declare-function difftastic-quit "difftastic" ())
+(declare-function persp-current-name "perspective")
+
+(use-package difftastic
+  :ensure t
+  :defer t
+  :commands (difftastic-git-diff-range difftastic-files)
+  :config
+  ;; Every difftastic view opens maximized; `q' restores the layout.
+  ;; Set globally: difftastic reads the display function in its process
+  ;; sentinel, after any `let' around the call has already ended.
+  (setq difftastic-executable my-desktop-difftastic-executable
+        difftastic-display-buffer-function #'my-git--diff-display
+        difftastic-requested-window-width-function #'my-git--diff-width)
+  (keymap-set difftastic-mode-map "q" #'my-git-diff-quit))
+
+(defvar-local my-git--diff-restore nil
+  "Window layout to restore when this diff buffer is quit.
+A cons (PERSPECTIVE . WINDOW-CONFIGURATION).  Permanent: difftastic
+re-enables its major mode on every run and rerun.")
+(put 'my-git--diff-restore 'permanent-local t)
+
+(defun my-git--root ()
+  "Return the Git root for the C-c g commands.
+The project perspective's root wins; otherwise the repository of
+`default-directory'."
+  (require 'magit)
+  (or (my-project-current-root)
+      (magit-toplevel)
+      (user-error "Not in a Git repository")))
+
+(defun my-git--persp-name ()
+  "Return the current perspective name, or nil."
+  (and (bound-and-true-p persp-mode) (persp-current-name)))
+
+(defun my-git--diff-width ()
+  "Return the difft width for a diff shown maximized in the frame.
+The selected window's fringe/margin overhead is subtracted."
+  (let ((window (my-project--main-window)))
+    (- (window-total-width (frame-root-window))
+       (- (window-total-width window)
+          (window-max-chars-per-line window)))))
+
+(defun my-git--diff-display (buffer _requested-width)
+  "Show difftastic BUFFER maximized, over side windows too.
+The previous layout (treemacs included) is remembered and restored
+by `my-git-diff-quit'."
+  (let ((restore (cons (my-git--persp-name)
+                       (current-window-configuration))))
+    (select-window (my-project--main-window))
+    ;; Ignoring window parameters lets the side windows go as well.
+    (let ((ignore-window-parameters t))
+      (delete-other-windows))
+    (set-window-dedicated-p nil nil)
+    (switch-to-buffer buffer nil t)
+    (setq my-git--diff-restore restore)))
+
+(defun my-git-diff-quit ()
+  "Quit a difftastic buffer, restoring the layout it replaced.
+Falls back to `difftastic-quit' when there is nothing to restore
+or the perspective changed since."
+  (interactive)
+  (let ((restore my-git--diff-restore))
+    (if (and restore (equal (car restore) (my-git--persp-name)))
+        (progn
+          (setq my-git--diff-restore nil)
+          (bury-buffer)
+          (set-window-configuration (cdr restore)))
+      (difftastic-quit))))
+
+(defun my-git--check-difft ()
+  "Signal a user error unless the difft executable is available."
+  (unless (executable-find my-desktop-difftastic-executable)
+    (user-error "difft (%s) not found in PATH"
+                my-desktop-difftastic-executable))
+  (require 'difftastic))
+
+(defun my-git--changes-p (&rest args)
+  "Return non-nil when `git diff ARGS' is not empty."
+  (/= 0 (apply #'process-file "git" nil nil nil
+               "diff" "--quiet" "--no-ext-diff" args)))
+
+(defmacro my-git--without-prefix (&rest body)
+  "Run BODY with no prefix argument.
+difftastic commands read `current-prefix-arg' (C-u C-u asks for
+extra difft arguments); the C-c g commands do not offer that."
+  (declare (indent 0) (debug t))
+  `(let ((current-prefix-arg nil))
+     ,@body))
+
+(defun my-git--diff (label rev args)
+  "Show `git diff ARGS REV' with difftastic; LABEL names the empty case."
+  (my-git--check-difft)
+  (let ((default-directory (my-git--root)))
+    (if (not (apply #'my-git--changes-p
+                    (append args (and rev (list rev)))))
+        (message "No %s changes" label)
+      (my-git--without-prefix
+        (difftastic-git-diff-range rev args)))))
+
+(defun my-git-status ()
+  "Open Magit status for the current project (see `my-git--root')."
+  (interactive)
+  (require 'magit)
+  (magit-status-setup-buffer (my-git--root)))
+
+(defun my-git-diff-staged ()
+  "Show staged changes (index vs HEAD) with difftastic."
+  (interactive)
+  (my-git--diff "staged" nil '("--cached")))
+
+(defun my-git-diff-unstaged ()
+  "Show unstaged changes (worktree vs index) with difftastic.
+Untracked files are not included; see `my-git-diff-file'."
+  (interactive)
+  (my-git--diff "unstaged" nil nil))
+
+(defun my-git-diff-all ()
+  "Show staged and unstaged changes (worktree vs HEAD) with difftastic.
+Untracked files are not included; see `my-git-diff-file'."
+  (interactive)
+  (my-git--diff "uncommitted" "HEAD" nil))
+
+(defun my-git--changed-files ()
+  "Return changed files of the repository at `default-directory'.
+Each element is (PATH STATUS ORIG): STATUS is the two-letter
+porcelain code, ORIG the source path of a rename or copy."
+  (let ((fields (split-string
+                 (with-output-to-string
+                   (with-current-buffer standard-output
+                     (process-file "git" nil t nil "status"
+                                   "--porcelain=v1" "-z"
+                                   "--untracked-files=all")))
+                 "\0" t))
+        files)
+    (while fields
+      (let* ((entry (pop fields))
+             (status (substring entry 0 2))
+             (path (substring entry 3))
+             (orig (and (memq (aref status 0) '(?R ?C)) (pop fields))))
+        (push (list path status orig) files)))
+    (nreverse files)))
+
+(defun my-git--status-label (status orig)
+  "Describe porcelain STATUS (and rename source ORIG) for the picker."
+  (let ((x (aref status 0))
+        (y (aref status 1)))
+    (cond
+     ((equal status "??") "untracked")
+     ((or (eq x ?U) (eq y ?U) (member status '("AA" "DD"))) "conflict")
+     (t
+      (string-join
+       (delq nil
+             (list (pcase x
+                     ((or ?M ?T) "staged")
+                     (?A "added")
+                     (?D "deleted")
+                     (?R (format "renamed from %s" orig))
+                     (?C (format "copied from %s" orig)))
+                   (pcase y
+                     ((or ?M ?T) "unstaged")
+                     (?A "intent to add")
+                     (?D "deleted in worktree"))))
+       ", ")))))
+
+(defun my-git-diff-file ()
+  "Pick a changed file and show its diff with difftastic.
+Staged, unstaged and untracked files are offered.  A tracked file
+is shown as worktree vs HEAD; an untracked one as a new file."
+  (interactive)
+  (my-git--check-difft)
+  (let* ((default-directory (my-git--root))
+         (files (or (my-git--changed-files)
+                    (user-error "No changed files")))
+         (annotate
+          (lambda (path)
+            (pcase-let ((`(,_ ,status ,orig) (assoc path files)))
+              (concat "  " (propertize (my-git--status-label status orig)
+                                       'face 'completions-annotations)))))
+         (path (let ((completion-extra-properties
+                      (list :annotation-function annotate)))
+                 (completing-read "Diff file: " (mapcar #'car files)
+                                  nil t)))
+         (entry (assoc path files)))
+    (my-git--without-prefix
+      (if (equal (nth 1 entry) "??")
+          (difftastic-files null-device (expand-file-name path))
+        (difftastic-git-diff-range
+         "HEAD" nil (delq nil (list path (nth 2 entry))))))))
 
 (provide 'desktop-project)
 ;;; desktop-project.el ends here

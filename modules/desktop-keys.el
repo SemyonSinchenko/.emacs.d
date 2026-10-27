@@ -27,6 +27,8 @@
 ;; C-s/C-l state save/load.
 ;; Projects live under C-c b: b opens a project workspace, a adds a
 ;; project, and s exposes the built-in project switch dispatcher.
+;; Git lives under C-c g: g Magit status, s/u/a difftastic diff of
+;; staged/unstaged/all changes, f diff of one picked changed file.
 ;; Social apps live under the C-c s prefix: b bluesky, h hackernews,
 ;; l lemmy, r reddit, t telegram.
 (defvar my-social-map (make-sparse-keymap)
@@ -34,6 +36,9 @@
 
 (defvar my-project-map (make-sparse-keymap)
   "Nested keymap of project commands, bound to C-c b.")
+
+(defvar my-git-map (make-sparse-keymap)
+  "Nested keymap of Git status and difftastic diffs, bound to C-c g.")
 
 (defvar my-ai-map (make-sparse-keymap)
   "Nested keymap of AI commands, bound to C-c a.")
@@ -92,6 +97,11 @@ Only populated when the pomodoro module is loaded.")
     (project ("b" . my-project-open)
              ("a" . my-project-add)
              ("s" . project-switch-project))
+    (git ("g" . my-git-status)             ; Magit status of the project
+         ("s" . my-git-diff-staged)        ; difftastic: index vs HEAD
+         ("u" . my-git-diff-unstaged)      ; difftastic: worktree vs index
+         ("a" . my-git-diff-all)           ; difftastic: worktree vs HEAD
+         ("f" . my-git-diff-file))         ; pick one changed file
     (social ("b" . my-bluesky)
             ("h" . my-hackernews)
             ("l" . my-lem)
@@ -156,6 +166,9 @@ Only populated when the pomodoro module is loaded.")
     ('project
      (dolist (b binds)
        (my-keys--bind my-project-map (car b) (cdr b))))
+    ('git
+     (dolist (b binds)
+       (my-keys--bind my-git-map (car b) (cdr b))))
     ('social
      (dolist (b binds)
        (my-keys--bind my-social-map (car b) (cdr b))))
@@ -191,6 +204,7 @@ Only populated when the pomodoro module is loaded.")
   (dolist (entry my-desktop--default-keys)
     (my-keys--apply-context (car entry) (cdr entry)))
   (define-key global-map (kbd "C-c b") my-project-map)
+  (define-key global-map (kbd "C-c g") my-git-map)
   (define-key global-map (kbd "C-c s") my-social-map)
   (define-key global-map (kbd "C-c a") my-ai-map)
   (when (fboundp 'lexicon-org-transform)

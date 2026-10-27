@@ -207,7 +207,12 @@ Always include `lexical-binding: t` at the top of every file.
     p transient, s/S/P start/stop/pause, c context, m modeline toggle) with
     the pomodoro sub-keys bound only when `desktop-pomodoro' is loaded.
   - `C-c b` - project prefix (`b` list/open a project workspace, `a` add
-    a project, `s` built-in project switch dispatcher). `C-c t` opens a new
+    a project, `s` built-in project switch dispatcher).
+  - `C-c g` - git prefix (`g` Magit status of the project; difftastic
+    diffs open maximized over the frame, treemacs too, and `q` restores
+    the layout: `s` staged, `u` unstaged, `a` both vs HEAD, `f` pick one
+    changed file incl. untracked; see modules/desktop-project.el).
+    `C-c t` opens a new
     terminal at the current project perspective's root; `C-c T` prompts for
     a project root.
   - Top level: ``C-c ` `` (treemacs sidebar), `C-c m` (sync menu),
