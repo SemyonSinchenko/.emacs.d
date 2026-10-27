@@ -116,6 +116,11 @@
 ;; (setq my-desktop-pomodoro-org-clock nil)
 ;; (setq my-desktop-pomodoro-sound nil)
 (setq my-desktop-enable-ai t)
+;; C-c g e: LLM explainer of uncommitted changes (uses the AI backends).
+;; Lockfiles are skipped by default, see my-desktop-git-explain-exclude:
+(setq my-desktop-enable-git-explain t)
+;; (setq my-desktop-git-explain-model 'deepseek-flash)
+;; (setq my-desktop-git-explain-language "Russian")
 (setq my-desktop-enable-torrent nil)    ; needs transmission-daemon
 (setq my-desktop-enable-telega t)
 ;; Server options (pick one):

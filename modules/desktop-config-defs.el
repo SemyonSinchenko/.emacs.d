@@ -287,6 +287,71 @@ A command name looked up in `exec-path', or an absolute path."
   :type 'string
   :group 'my-desktop)
 
+;; C-c g e: LLM explainer of uncommitted changes (desktop-git-explain).
+
+(defcustom my-desktop-enable-git-explain t
+  "Load desktop-git-explain: `C-c g e' explains uncommitted changes.
+Uses the gptel backends of the AI module (`my-desktop-enable-ai')."
+  :type 'boolean
+  :group 'my-desktop)
+
+(defcustom my-desktop-git-explain-backend nil
+  "Name of the gptel backend for explainers, from `my-desktop-ai-backends'.
+Nil uses the default backend (the first one with a key)."
+  :type '(choice string (const nil))
+  :group 'my-desktop)
+
+(defcustom my-desktop-git-explain-model nil
+  "Model symbol for explainers, e.g. `deepseek-flash'.
+Nil uses the backend's default model."
+  :type '(choice symbol (const nil))
+  :group 'my-desktop)
+
+(defcustom my-desktop-git-explain-budget 400000
+  "Maximum size of an explainer request, in characters.
+When the change does not fit, full file texts are dropped first,
+then the diff falls back from function context to plain context."
+  :type 'natnum
+  :group 'my-desktop)
+
+(defcustom my-desktop-git-explain-exclude
+  '(;; Lockfiles: huge, generated, often committed.
+    "uv.lock" "poetry.lock" "Pipfile.lock" "pdm.lock"
+    "Cargo.lock"
+    "package-lock.json" "npm-shrinkwrap.json" "yarn.lock"
+    "pnpm-lock.yaml" "bun.lock" "bun.lockb"
+    "go.sum" "Gemfile.lock" "composer.lock" "flake.lock" "mix.lock"
+    "pubspec.lock" "Podfile.lock" "Package.resolved" "gradle.lockfile"
+    ;; Build output.
+    "*.min.js" "*.min.css" "*.map")
+  "Glob patterns of changed files the explainer skips by default.
+A pattern without a slash matches the file name, one with a slash
+the path from the repository root.  Skipped files can still be
+marked in the `C-c g e s' checklist."
+  :type '(repeat string)
+  :group 'my-desktop)
+
+(defcustom my-desktop-git-explain-max-file-size 65536
+  "Diff size (characters) above which a file is skipped by default."
+  :type 'natnum
+  :group 'my-desktop)
+
+(defcustom my-desktop-git-explain-language "English"
+  "Language the explainer is written in."
+  :type 'string
+  :group 'my-desktop)
+
+(defcustom my-desktop-git-explain-instructions
+  '("AGENTS.md" "CLAUDE.md" "REVIEW.md")
+  "Project instruction files sent with an explainer, when present."
+  :type '(repeat string)
+  :group 'my-desktop)
+
+(defcustom my-desktop-git-explain-instructions-max 16000
+  "Maximum characters sent from each instruction file."
+  :type 'natnum
+  :group 'my-desktop)
+
 ;; ------------------------------------------------------------------
 ;; 4. Terminal
 ;; ------------------------------------------------------------------

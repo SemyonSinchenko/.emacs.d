@@ -51,6 +51,7 @@ configurations**:
 │   ├── desktop-dsh.el       # DSH web launcher + dsh-emacs client (fallback)
 │   ├── desktop-dsh-acp.el   # DSH / Claude ACP agents through agent-shell (default)
 │   ├── desktop-edit.el      # JSON/YAML/TOML/Markdown/CSV editing + apheleia
+│   ├── desktop-git-explain.el # C-c g e: gptel explainer of uncommitted changes
 │   ├── desktop-lexicon.el   # lexicon-org AI text transforms
 │   ├── lang-lsp.el          # Eglot (LSP), treesit-auto, Flymake, Apheleia
 │   ├── lang-prog.el         # Language settings (Python, Java, Scala, Rust, ...)
@@ -211,10 +212,11 @@ Always include `lexical-binding: t` at the top of every file.
   - `C-c g` - git prefix (`g` Magit status of the project; difftastic
     diffs open maximized over the frame, treemacs too, and `q` restores
     the layout: `s` staged, `u` unstaged, `a` both vs HEAD, `f` pick one
-    changed file incl. untracked; see modules/desktop-project.el).
-    `C-c t` opens a new
-    terminal at the current project perspective's root; `C-c T` prompts for
-    a project root.
+    changed file incl. untracked; see modules/desktop-project.el; `e`
+    LLM explainer, all changes or a file checklist, lockfiles skipped by
+    default, bound only when `desktop-git-explain' is loaded).
+    `C-c t` opens a new terminal at the current project perspective's
+    root; `C-c T` prompts for a project root.
   - Top level: ``C-c ` `` (treemacs sidebar), `C-c m` (sync menu),
     `C-c t` / `C-c T` (terminal), `C-c p` (music play/pause),
     `C-c M-w` (copy image at point), `C-c d` (DSH container,

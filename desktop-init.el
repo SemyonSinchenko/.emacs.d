@@ -196,6 +196,7 @@
              (desktop-torrent . my-desktop-enable-torrent)
              (desktop-comms . my-desktop-enable-telega)
              (desktop-ai . my-desktop-enable-ai)
+             (desktop-git-explain . my-desktop-enable-git-explain)
              (desktop-dsh . my-desktop-enable-dsh)
              (desktop-dsh-acp . my-desktop-enable-dsh-acp)
              (desktop-roguelike . my-desktop-enable-roguelike)

@@ -28,7 +28,8 @@
 ;; Projects live under C-c b: b opens a project workspace, a adds a
 ;; project, and s exposes the built-in project switch dispatcher.
 ;; Git lives under C-c g: g Magit status, s/u/a difftastic diff of
-;; staged/unstaged/all changes, f diff of one picked changed file.
+;; staged/unstaged/all changes, f diff of one picked changed file,
+;; e LLM explainer of the changes (desktop-git-explain).
 ;; Social apps live under the C-c s prefix: b bluesky, h hackernews,
 ;; l lemmy, r reddit, t telegram.
 (defvar my-social-map (make-sparse-keymap)
@@ -102,6 +103,7 @@ Only populated when the pomodoro module is loaded.")
          ("u" . my-git-diff-unstaged)      ; difftastic: worktree vs index
          ("a" . my-git-diff-all)           ; difftastic: worktree vs HEAD
          ("f" . my-git-diff-file))         ; pick one changed file
+    (git-explain ("e" . my-git-explain))   ; LLM explainer, C-c g e
     (social ("b" . my-bluesky)
             ("h" . my-hackernews)
             ("l" . my-lem)
@@ -169,6 +171,11 @@ Only populated when the pomodoro module is loaded.")
     ('git
      (dolist (b binds)
        (my-keys--bind my-git-map (car b) (cdr b))))
+    ('git-explain
+     ;; Bound only when the explainer module is loaded.
+     (when (fboundp 'my-git-explain)
+       (dolist (b binds)
+         (my-keys--bind my-git-map (car b) (cdr b)))))
     ('social
      (dolist (b binds)
        (my-keys--bind my-social-map (car b) (cdr b))))

@@ -358,11 +358,11 @@ In a normal workspace, retain `my-term-new' fallback directory behavior."
         difftastic-requested-window-width-function #'my-git--diff-width)
   (keymap-set difftastic-mode-map "q" #'my-git-diff-quit))
 
-(defvar-local my-git--diff-restore nil
-  "Window layout to restore when this diff buffer is quit.
+(defvar-local my-git--restore nil
+  "Window layout to restore when this maximized buffer is quit.
 A cons (PERSPECTIVE . WINDOW-CONFIGURATION).  Permanent: difftastic
 re-enables its major mode on every run and rerun.")
-(put 'my-git--diff-restore 'permanent-local t)
+(put 'my-git--restore 'permanent-local t)
 
 (defun my-git--root ()
   "Return the Git root for the C-c g commands.
@@ -385,10 +385,10 @@ The selected window's fringe/margin overhead is subtracted."
        (- (window-total-width window)
           (window-max-chars-per-line window)))))
 
-(defun my-git--diff-display (buffer _requested-width)
-  "Show difftastic BUFFER maximized, over side windows too.
-The previous layout (treemacs included) is remembered and restored
-by `my-git-diff-quit'."
+(defun my-git--maximize (buffer)
+  "Show BUFFER maximized, over side windows too.
+The previous layout (treemacs included) is remembered in BUFFER and
+restored by `my-git--restore-layout'."
   (let ((restore (cons (my-git--persp-name)
                        (current-window-configuration))))
     (select-window (my-project--main-window))
@@ -397,20 +397,31 @@ by `my-git-diff-quit'."
       (delete-other-windows))
     (set-window-dedicated-p nil nil)
     (switch-to-buffer buffer nil t)
-    (setq my-git--diff-restore restore)))
+    (with-current-buffer buffer
+      (setq my-git--restore restore))))
+
+(defun my-git--diff-display (buffer _requested-width)
+  "Show difftastic BUFFER maximized; see `my-git--maximize'."
+  (my-git--maximize buffer))
+
+(defun my-git--restore-layout ()
+  "Bury the current buffer and restore the layout it replaced.
+Return nil, doing nothing, when there is no layout to restore or the
+perspective changed since."
+  (let ((restore my-git--restore))
+    (when (and restore (equal (car restore) (my-git--persp-name)))
+      (setq my-git--restore nil)
+      (bury-buffer)
+      (set-window-configuration (cdr restore))
+      t)))
 
 (defun my-git-diff-quit ()
   "Quit a difftastic buffer, restoring the layout it replaced.
 Falls back to `difftastic-quit' when there is nothing to restore
 or the perspective changed since."
   (interactive)
-  (let ((restore my-git--diff-restore))
-    (if (and restore (equal (car restore) (my-git--persp-name)))
-        (progn
-          (setq my-git--diff-restore nil)
-          (bury-buffer)
-          (set-window-configuration (cdr restore)))
-      (difftastic-quit))))
+  (unless (my-git--restore-layout)
+    (difftastic-quit)))
 
 (defun my-git--check-difft ()
   "Signal a user error unless the difft executable is available."
@@ -524,13 +535,20 @@ is shown as worktree vs HEAD; an untracked one as a new file."
          (path (let ((completion-extra-properties
                       (list :annotation-function annotate)))
                  (completing-read "Diff file: " (mapcar #'car files)
-                                  nil t)))
-         (entry (assoc path files)))
-    (my-git--without-prefix
-      (if (equal (nth 1 entry) "??")
-          (difftastic-files null-device (expand-file-name path))
-        (difftastic-git-diff-range
-         "HEAD" nil (delq nil (list path (nth 2 entry))))))))
+                                  nil t))))
+    (apply #'my-git--diff-path (assoc path files))))
+
+(defun my-git--diff-path (path status orig)
+  "Show the difftastic diff of changed PATH in `default-directory'.
+STATUS is its porcelain code and ORIG a rename source, as returned
+by `my-git--changed-files'.  A tracked file is shown as worktree vs
+HEAD; an untracked one as a new file."
+  (my-git--check-difft)
+  (my-git--without-prefix
+    (if (equal status "??")
+        (difftastic-files null-device (expand-file-name path))
+      (difftastic-git-diff-range
+       "HEAD" nil (delq nil (list path orig))))))
 
 (provide 'desktop-project)
 ;;; desktop-project.el ends here
