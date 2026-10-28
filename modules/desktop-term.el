@@ -19,6 +19,8 @@
 (declare-function persp-current-name "perspective")
 (declare-function persp-add-buffer "perspective" (buffer-or-name))
 (declare-function ghostel-list-buffers "ghostel" ())
+(declare-function persp-is-current-buffer "perspective"
+                  (buf &optional dont-ignore-ephemeral))
 (defvar perspective-map)
 
 (use-package ghostel
@@ -31,7 +33,26 @@
 ;; C-c w g: pick a ghostel buffer.  This replaces perspective's
 ;; `persp-add-buffer-to-frame-global', which the Desktop does not use.
 (with-eval-after-load 'perspective
-  (define-key perspective-map (kbd "g") #'ghostel-list-buffers))
+  (define-key perspective-map (kbd "g") #'my-term-switch))
+
+(defun my-term-switch ()
+  "Switch to a ghostel terminal of the current workspace.
+With exactly one ghostel buffer in the current perspective, open
+it directly; otherwise fall back to `ghostel-list-buffers'."
+  (interactive)
+  (require 'ghostel)
+  (let ((bufs (seq-filter
+               (lambda (b)
+                 (and (provided-mode-derived-p
+                       (buffer-local-value 'major-mode b) 'ghostel-mode)
+                      (or (not (bound-and-true-p persp-mode))
+                          (persp-is-current-buffer b))))
+               (buffer-list))))
+    (if (= (length bufs) 1)
+        (pop-to-buffer (car bufs)
+                       (append display-buffer--same-window-action
+                               '((category . comint))))
+      (ghostel-list-buffers))))
 
 (defun my-term--next-id (ws)
   "Return the next terminal number for workspace WS.
