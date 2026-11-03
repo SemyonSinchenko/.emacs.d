@@ -199,6 +199,8 @@
              (desktop-git-explain . my-desktop-enable-git-explain)
              (desktop-dsh . my-desktop-enable-dsh)
              (desktop-dsh-acp . my-desktop-enable-dsh-acp)
+             (desktop-mas . my-desktop-enable-mas)
+             (desktop-podman . my-desktop-enable-podman)
              (desktop-roguelike . my-desktop-enable-roguelike)
              desktop-edit
              (desktop-lexicon . my-desktop-enable-lexicon)

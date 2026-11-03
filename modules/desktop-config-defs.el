@@ -857,6 +857,83 @@ config's default options, like
   :group 'my-desktop)
 
 ;; ------------------------------------------------------------------
+;; 9d. Multi-agent runs (desktop-mas) and podman helpers
+;; ------------------------------------------------------------------
+
+(defcustom my-desktop-enable-mas t
+  "Load desktop-mas: multi-agent flows (C-c a m) over the ACP agents.
+Needs desktop-dsh-acp (agent-shell + the run-dsh / run-claude
+launchers with --role/--outbox/--timeout support) and podman."
+  :type 'boolean
+  :group 'my-desktop)
+
+(defcustom my-desktop-mas-max-iterations 20
+  "Safeguard: the most review rounds one multi-agent run may take.
+One iteration is one critique (review or roast) of the work; the
+run stops with status `limit' when the next round would exceed it."
+  :type 'integer
+  :group 'my-desktop)
+
+(defcustom my-desktop-mas-stall-rounds 2
+  "Stop a run as `stalled' after this many unchanged critiques.
+A critique is unchanged when its open findings (id and title) equal
+the previous critique's.  Set to nil to disable the check."
+  :type '(choice (const :tag "Off" nil) integer)
+  :group 'my-desktop)
+
+(defcustom my-desktop-mas-run-timeout (* 6 60 60)
+  "Seconds a multi-agent container may live (podman --timeout).
+A backstop: even containers left behind by an Emacs crash are
+killed by podman after this time."
+  :type 'integer
+  :group 'my-desktop)
+
+(defcustom my-desktop-mas-turn-idle-timeout (* 15 60)
+  "Seconds an agent may work on one step before you get a notice.
+Nothing is killed; the notice repeats every this many seconds."
+  :type 'integer
+  :group 'my-desktop)
+
+(defcustom my-desktop-mas-gates '(after-plan)
+  "Points where a multi-agent run waits for `my-mas-continue'.
+Known gates: `after-plan' (openspec: after the specs are drafted)
+and `before-archive' (openspec: before the change is archived)."
+  :type '(set (const after-plan) (const before-archive))
+  :group 'my-desktop)
+
+(defcustom my-desktop-mas-roles
+  '((openspec (lead . claude) (impl . dsh))
+    (architecture (architect . claude) (critic . dsh)))
+  "Harness playing each role of each multi-agent flow.
+An alist (FLOW (ROLE . HARNESS) ...); HARNESS is `claude' or `dsh'."
+  :type '(alist :key-type symbol
+                :value-type (alist :key-type symbol :value-type symbol))
+  :group 'my-desktop)
+
+(defcustom my-desktop-mas-prompts-dir
+  (expand-file-name "mas-prompts" user-emacs-directory)
+  "Directory of the multi-agent prompt templates (<flow>/<step>.md)."
+  :type 'directory
+  :group 'my-desktop)
+
+(defcustom my-desktop-mas-stop-agents-on-finish t
+  "Stop the agents (and their containers) when a run finishes.
+When nil, finished runs keep their agent buffers until
+`my-mas-abort' (C-c a m k); the transcripts are kept either way."
+  :type 'boolean
+  :group 'my-desktop)
+
+(defcustom my-desktop-enable-podman t
+  "Load desktop-podman: the C-c p podman helpers."
+  :type 'boolean
+  :group 'my-desktop)
+
+(defcustom my-desktop-podman-command "podman"
+  "Podman executable used by desktop-podman and desktop-mas."
+  :type 'string
+  :group 'my-desktop)
+
+;; ------------------------------------------------------------------
 ;; Roguelike copilot (NetHack etc.)
 ;; ------------------------------------------------------------------
 

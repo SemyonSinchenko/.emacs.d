@@ -42,7 +42,16 @@
   "Nested keymap of Git status and difftastic diffs, bound to C-c g.")
 
 (defvar my-ai-map (make-sparse-keymap)
-  "Nested keymap of AI commands, bound to C-c a.")
+  "Nested keymap of AI commands, bound to C-c a.
+`my-mas-map' is nested under C-c a m.")
+
+(defvar my-mas-map (make-sparse-keymap)
+  "Nested keymap of multi-agent runs, bound to C-c a m.
+Only bound when the desktop-mas module is loaded.")
+
+(defvar my-podman-map (make-sparse-keymap)
+  "Nested keymap of podman helpers, bound to C-c p.
+Only bound when the desktop-podman module is loaded.")
 
 (defvar my-lexicon-map (make-sparse-keymap)
   "Nested keymap of lexicon AI text transforms, bound to C-c l.
@@ -86,7 +95,6 @@ Only populated when the pomodoro module is loaded.")
             ("C-c m" . my-sync-menu)
             ("C-c t" . my-project-terminal)
             ("C-c T" . my-term-project)
-            ("C-c p" . my-media-toggle)
             ("C-c M-w" . my-clipboard-copy-image) ; copy image at point
             ("C-c d" . my-dsh-open)             ; DSH container session
             ;; C-d: удалить выделение, иначе символ вперед.
@@ -126,6 +134,16 @@ Only populated when the pomodoro module is loaded.")
         ("l" . my-ai-session-search)  ; search transcripts (grep)
         ("s" . my-ai-session-save)    ; save chat now
         ("z" . my-ai-usage))          ; Z-AI + DeepSeek + Claude usage
+    (mas ("o" . my-mas-openspec)      ; openspec: plan, implement, review
+         ("a" . my-mas-architecture)  ; design + roast until agreed
+         ("s" . my-mas-status)
+         ("c" . my-mas-continue)      ; past a gate or a pause
+         ("p" . my-mas-pause)         ; after the current turn
+         ("k" . my-mas-abort)         ; stop agents + containers
+         ("l" . my-mas-layout)        ; agents side by side again
+         ("r" . my-mas-open-run)      ; run folder / report
+         ("m" . my-mas-menu))         ; transient with all of the above
+    (podman ("l" . my-podman-pick-container)) ; RET copies the ID
     (lexicon ("t" . lexicon-org-transform)        ; transform region
              ("p" . lexicon-org-transform-prompt) ; prompt for transform
              ("d" . lexicon-org-download)         ; download model
@@ -182,6 +200,15 @@ Only populated when the pomodoro module is loaded.")
     ('ai
      (dolist (b binds)
        (my-keys--bind my-ai-map (car b) (cdr b))))
+    ('mas
+     ;; Bound only when the multi-agent module is loaded.
+     (when (fboundp 'my-mas-openspec)
+       (dolist (b binds)
+         (my-keys--bind my-mas-map (car b) (cdr b)))))
+    ('podman
+     (when (fboundp 'my-podman-pick-container)
+       (dolist (b binds)
+         (my-keys--bind my-podman-map (car b) (cdr b)))))
     ('lexicon
      ;; Bound only when the lexicon-org autoloads exist (the module
      ;; is loaded AND the checkout is installed); otherwise skip
@@ -214,6 +241,10 @@ Only populated when the pomodoro module is loaded.")
   (define-key global-map (kbd "C-c g") my-git-map)
   (define-key global-map (kbd "C-c s") my-social-map)
   (define-key global-map (kbd "C-c a") my-ai-map)
+  (when (fboundp 'my-mas-openspec)
+    (define-key my-ai-map (kbd "m") my-mas-map))
+  (when (fboundp 'my-podman-pick-container)
+    (define-key global-map (kbd "C-c p") my-podman-map))
   (when (fboundp 'lexicon-org-transform)
     (define-key global-map (kbd "C-c l") my-lexicon-map))
   (when (fboundp 'my-kitsu-dashboard)
@@ -255,6 +286,8 @@ Only populated when the pomodoro module is loaded.")
      :if (lambda () (fboundp 'my-dsh-open)))
     ("A" "DSH ACP agent" my-dsh-acp-open
      :if (lambda () (fboundp 'my-dsh-acp-open)))
+    ("M" "Multi-agent run" my-mas-menu
+     :if (lambda () (fboundp 'my-mas-menu)))
     ("z" "AI usage" my-ai-usage
      :if (lambda () (fboundp 'my-ai-usage)))
     ("l" "Lexicon transform" lexicon-org-transform

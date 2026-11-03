@@ -88,8 +88,9 @@
 ;; ------------------------------------------------------------------
 
 (setq my-desktop-enable-media t)
-;; Music lives in listen.el (C-c p = pause/resume, C-c m = library,
-;; M-x listen = full player menu).  Directory: my-desktop-music-dir.
+;; Music lives in listen.el (M-x listen = full player menu,
+;; M-x my-media-toggle = pause/resume, M-x my-media-music-library =
+;; library).  Directory: my-desktop-music-dir.
 (setq my-desktop-enable-reader t)
 (setq my-desktop-enable-rss t)
 (setq my-desktop-enable-elfeed-tube t)
@@ -269,6 +270,42 @@
       '(("model" . "[\"deepseek-official\",\"deepseek-flash\"]")))
 ;; Default ACP config options for new Claude sessions, same shape:
 ;; (setq my-desktop-claude-acp-default-config-options '(("model" . "...")))
+
+;; ------------------------------------------------------------------
+;; 9d. Multi-agent runs (C-c a m) and podman (C-c p)
+;;     Two agents on one project, side by side, driven by Emacs:
+;;       C-c a m o  openspec: the lead drafts the change, the
+;;                  implementer implements, the lead verifies + reviews,
+;;                  the implementer fixes ... until the lead approves;
+;;                  the lead archives.  No commits.
+;;       C-c a m a  architecture: the architect designs, the critic
+;;                  roasts it against the worktree (read-only), the
+;;                  architect fixes or pushes back ... until the critic
+;;                  approves.
+;;     Both commands ask which agent (Claude or DSH) plays each role;
+;;     defaults: lead/architect = Claude, impl/critic = DSH.
+;;       C-c a m s/c/p/k/l/r/m  status, continue, pause, abort, layout,
+;;                  run folder/report, menu.
+;;     Results go to <project>/.mas/<run-id>/ (ignored through
+;;     .git/info/exclude); prompts live in ~/.emacs.d/mas-prompts/.
+;;     Needs run-dsh / run-claude with --role/--outbox/--timeout and
+;;     podman.  C-c p l lists running containers; RET copies the ID.
+;; ------------------------------------------------------------------
+(setq my-desktop-enable-mas t)
+(setq my-desktop-enable-podman t)
+;; Safeguard: at most this many review rounds per run.
+(setq my-desktop-mas-max-iterations 20)
+;; Where a run waits for C-c a m c (after-plan, before-archive):
+(setq my-desktop-mas-gates '(after-plan))
+;; Default harness per role (claude or dsh).  C-c a m o / a ask for
+;; every role with these as defaults (RET keeps them); a harness may
+;; also play both roles:
+;; (setq my-desktop-mas-roles
+;;       '((openspec (lead . claude) (impl . dsh))
+;;         (architecture (architect . claude) (critic . dsh))))
+;; Container lifetime backstop (seconds) and the still-working notice:
+;; (setq my-desktop-mas-run-timeout (* 6 60 60))
+;; (setq my-desktop-mas-turn-idle-timeout (* 15 60))
 
 ;; ------------------------------------------------------------------
 ;; 10. Home tab

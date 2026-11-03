@@ -62,6 +62,7 @@
                agent-shell-get-config)))
 
 (declare-function agent-shell-start "agent-shell" t)
+(declare-function agent-shell--start "agent-shell" t)
 (declare-function agent-shell-restart "agent-shell" t)
 (declare-function agent-shell-session-id "agent-shell" t)
 (declare-function agent-shell-project-buffers "agent-shell" (&optional cwd))
@@ -164,10 +165,13 @@ welcome text, icon and session meta are reused.")
       (user-error "ACP: unknown harness %s" choice))
     (setq my-dsh-acp--last-harness harness)))
 
-(defun my-dsh-acp--make-client (buffer harness)
+(defun my-dsh-acp--make-client (buffer harness &optional extra-args)
   "Create the ACP client of HARNESS for BUFFER.
 The launcher owns the container, project directory and environment,
-so no environment variables are injected here."
+so no environment variables are injected here.  EXTRA-ARGS are
+launcher options (e.g. --role, --outbox); they go right after the
+program name, before the configured arguments, so they stay
+launcher-side even when the configured command contains `--'."
   (unless buffer
     (error "Missing required argument: :buffer"))
   (my-dsh-acp--require-agent-shell)
@@ -177,14 +181,16 @@ so no environment variables are injected here."
         (agent-shell-command-prefix nil))
     (agent-shell--make-acp-client
      :command (car command)
-     :command-params (cdr command)
+     :command-params (append extra-args (cdr command))
      :context-buffer buffer)))
 
-(defun my-dsh-acp--agent-config (harness)
+(defun my-dsh-acp--agent-config (harness &optional extra-args buffer-name)
   "Return the agent-shell configuration for HARNESS.
 It starts from the stock agent-shell config of that agent (welcome
 art, icon and session meta), but gets its own identifier, buffer
-name, prompt and client maker."
+name, prompt and client maker.  EXTRA-ARGS are passed to the
+launcher (see `my-dsh-acp--make-client'); BUFFER-NAME replaces the
+harness name as the agent-shell buffer name."
   (my-dsh-acp--require-agent-shell)
   (let* ((name (my-dsh-acp--harness-name harness))
          (prompt (concat name "> "))
@@ -194,11 +200,11 @@ name, prompt and client maker."
           (my-dsh-acp--harness-get harness :identifier)
           (alist-get :mode-line-name config)
           (my-dsh-acp--harness-get harness :mode-line)
-          (alist-get :buffer-name config) name
+          (alist-get :buffer-name config) (or buffer-name name)
           (alist-get :shell-prompt config) prompt
           (alist-get :shell-prompt-regexp config) (regexp-quote prompt)
           (alist-get :client-maker config)
-          (lambda (buffer) (my-dsh-acp--make-client buffer harness))
+          (lambda (buffer) (my-dsh-acp--make-client buffer harness extra-args))
           (alist-get :default-config-options config)
           (lambda () (symbol-value options-var))
           (alist-get :install-instructions config)
@@ -233,13 +239,21 @@ Unlike `my-dsh-acp--project-root', never fall back to
       (my-dsh-acp--project-root 'no-fallback)
     (user-error nil)))
 
+(defvar-local my-dsh-acp-owner nil
+  "Non-nil in an agent-shell buffer started for another module.
+The value names the owner (e.g. a multi-agent run, see
+desktop-mas.el).  Owned shells are invisible to the C-c a d
+commands: they never focus, kill, restart or reuse them.")
+
 (defun my-dsh-acp--project-shell (root harness)
-  "Return the live HARNESS shell buffer for ROOT, or nil."
+  "Return the live HARNESS shell buffer for ROOT, or nil.
+Shells owned by another module (`my-dsh-acp-owner') are skipped."
   (my-dsh-acp--require-agent-shell)
   (let ((shells
          (seq-filter
           (lambda (buffer)
-            (eq (my-dsh-acp--buffer-harness buffer) harness))
+            (and (eq (my-dsh-acp--buffer-harness buffer) harness)
+                 (not (buffer-local-value 'my-dsh-acp-owner buffer))))
           (agent-shell-project-buffers root))))
     (when (> (length shells) 1)
       (message "%s ACP: %d agent shells in %s; using %s"
@@ -314,6 +328,38 @@ install it from sem-dev-container"
                    (my-dsh-acp--harness-name harness)
                    (if session-id "resume" "start")
                    root (error-message-string err))))))
+
+;;;###autoload
+(cl-defun my-dsh-acp-start-owned (&key root harness owner extra-args
+                                       buffer-name)
+  "Start a HARNESS agent-shell for ROOT in the background; return it.
+The shell is marked as owned by OWNER (see `my-dsh-acp-owner'), so
+the C-c a d commands ignore it.  EXTRA-ARGS are launcher options and
+BUFFER-NAME the agent-shell buffer name.  Always a new session; the
+buffer is not displayed (the owner lays out its windows)."
+  (unless owner
+    (error "my-dsh-acp-start-owned: OWNER is required"))
+  (let ((command (my-dsh-acp--harness-command harness))
+        (var (my-dsh-acp--harness-get harness :command-var)))
+    (unless (and (consp command) (stringp (car command)))
+      (user-error "ACP: `%s' must be a non-empty list of strings" var))
+    (unless (executable-find (car command))
+      (user-error "ACP: `%s' not found on `exec-path'; \
+install it from sem-dev-container"
+                  (car command))))
+  (my-dsh-acp--require-agent-shell)
+  (let* ((default-directory root)
+         (agent-shell-session-strategy 'new)
+         (buffer (agent-shell--start
+                  :config (my-dsh-acp--agent-config harness extra-args
+                                                    buffer-name)
+                  :no-focus t
+                  :new-session t
+                  :cwd root)))
+    (when (buffer-live-p buffer)
+      (with-current-buffer buffer
+        (setq my-dsh-acp-owner owner)))
+    buffer))
 
 ;; ------------------------------------------------------------------
 ;; Session history: transcript front matter
