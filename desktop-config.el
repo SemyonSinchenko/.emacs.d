@@ -243,19 +243,21 @@
 ;; (setq my-desktop-roguelike-model 'deepseek-v4-flash)
 
 ;; ------------------------------------------------------------------
-;; 9c. ACP agents in dev containers: DSH (DeepSeek Harness) and
-;;     Claude Code.  Needs the launchers on PATH:
+;; 9c. ACP agents in dev containers: DSH (DeepSeek Harness), Claude
+;;     Code and Codex.  Needs the launchers on PATH:
 ;;       ln -s ~/sem-dev-container/bins/run-dsh ~/.local/bin/run-dsh
 ;;       ln -s ~/sem-dev-container/bins/run-claude ~/.local/bin/run-claude
-;;     C-c a d r asks DSH or Claude, then opens/focuses that agent for
-;;     this perspective through agent-shell (run-dsh / run-claude
-;;     --acp); a new shell always starts a new session.  C-c a d o
-;;     resumes a session by ID, C-c a d l lists this project's
-;;     sessions of both harnesses (date | harness | id | first
-;;     message), and C-c a d s searches the transcripts with Consult.
-;;     C-c a d k / R / n / f kill, restart, clear or send a file to an
-;;     agent (asks which only when both run).  One agent per project
-;;     and harness.
+;;       ln -s ~/sem-dev-container/bins/run-codex ~/.local/bin/run-codex
+;;     Codex logs in once: run-codex --exec codex login --device-auth.
+;;     C-c a d r asks DSH, Claude or Codex, then opens/focuses that
+;;     agent for this perspective through agent-shell (run-dsh /
+;;     run-claude / run-codex --acp); a new shell always starts a new
+;;     session.  C-c a d o resumes a session by ID, C-c a d l lists
+;;     this project's sessions of all harnesses (date | harness | id |
+;;     first message), and C-c a d s searches the transcripts with
+;;     Consult.  C-c a d k / R / n / f kill, restart, clear or send a
+;;     file to an agent (asks which only when several run).  One agent
+;;     per project and harness.
 ;;     Old dsh-emacs web setup is still loaded but not in the menu:
 ;;     C-c d runs my-dsh-open, M-x my-dsh-kill stops it, and
 ;;     M-x my-dsh-open-web opens the browser setup page.
@@ -270,6 +272,9 @@
       '(("model" . "[\"deepseek-official\",\"deepseek-flash\"]")))
 ;; Default ACP config options for new Claude sessions, same shape:
 ;; (setq my-desktop-claude-acp-default-config-options '(("model" . "...")))
+;; Default ACP config options for new Codex sessions, same shape:
+;; (setq my-desktop-codex-acp-default-config-options
+;;       '(("reasoning_effort" . "high")))
 
 ;; ------------------------------------------------------------------
 ;; 9d. Multi-agent runs (C-c a m) and podman (C-c p)
@@ -282,14 +287,14 @@
 ;;                  roasts it against the worktree (read-only), the
 ;;                  architect fixes or pushes back ... until the critic
 ;;                  approves.
-;;     Both commands ask which agent (Claude or DSH) plays each role;
-;;     defaults: lead/architect = Claude, impl/critic = DSH.
+;;     Both commands ask which agent (Claude, Codex or DSH) plays each
+;;     role; defaults: lead/architect = Claude, impl/critic = DSH.
 ;;       C-c a m s/c/p/k/l/r/m  status, continue, pause, abort, layout,
 ;;                  run folder/report, menu.
 ;;     Results go to <project>/.mas/<run-id>/ (ignored through
 ;;     .git/info/exclude); prompts live in ~/.emacs.d/mas-prompts/.
-;;     Needs run-dsh / run-claude with --role/--outbox/--timeout and
-;;     podman.  C-c p l lists running containers; RET copies the ID.
+;;     Needs run-dsh / run-claude / run-codex with --role/--outbox/
+;;     --timeout and podman.  C-c p l lists running containers; RET copies the ID.
 ;; ------------------------------------------------------------------
 (setq my-desktop-enable-mas t)
 (setq my-desktop-enable-podman t)
@@ -297,7 +302,7 @@
 (setq my-desktop-mas-max-iterations 20)
 ;; Where a run waits for C-c a m c (after-plan, before-archive):
 (setq my-desktop-mas-gates '(after-plan))
-;; Default harness per role (claude or dsh).  C-c a m o / a ask for
+;; Default harness per role (claude, codex or dsh).  C-c a m o / a ask for
 ;; every role with these as defaults (RET keeps them); a harness may
 ;; also play both roles:
 ;; (setq my-desktop-mas-roles

@@ -1,13 +1,13 @@
-;;; desktop-dsh-acp.el --- DSH / Claude ACP agents through agent-shell -*- lexical-binding: t; -*-
+;;; desktop-dsh-acp.el --- DSH / Claude / Codex ACP agents through agent-shell -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; ACP bridge to the sem-dev-container harness images.
 ;;
 ;; Each harness is a launcher that runs the project container and speaks
-;; ACP over stdio: `run-dsh --acp' (dsh --profile acp) and
-;; `run-claude --acp' (claude-agent-acp).  agent-shell owns the client
-;; and the chat UI; for it the harness is only a different command, see
-;; `my-dsh-acp--harnesses'.
+;; ACP over stdio: `run-dsh --acp' (dsh --profile acp),
+;; `run-claude --acp' (claude-agent-acp) and `run-codex --acp'
+;; (codex-acp).  agent-shell owns the client and the chat UI; for it
+;; the harness is only a different command, see `my-dsh-acp--harnesses'.
 ;;
 ;; One agent-shell buffer per project and harness.  Opening an agent
 ;; focuses the existing buffer instead of starting another ACP process;
@@ -79,6 +79,7 @@
 (declare-function agent-shell-deepseek-make-agent-config "agent-shell-deepseek")
 (declare-function agent-shell-anthropic-make-claude-code-config
                   "agent-shell-anthropic")
+(declare-function agent-shell-openai-make-codex-config "agent-shell-openai")
 (declare-function my-project-current-root "desktop-project")
 (declare-function persp-add-buffer "perspective" (buffer-or-name))
 (declare-function my-desktop--warn "desktop-init" (&rest args))
@@ -112,7 +113,14 @@ install it from MELPA")))
             :command-var my-desktop-claude-acp-command
             :options-var my-desktop-claude-acp-default-config-options
             :base agent-shell-anthropic-make-claude-code-config
-            :launcher "run-claude"))
+            :launcher "run-claude")
+    (codex :name "Codex"
+           :identifier codex-acp
+           :mode-line "Codex ACP"
+           :command-var my-desktop-codex-acp-command
+           :options-var my-desktop-codex-acp-default-config-options
+           :base agent-shell-openai-make-codex-config
+           :launcher "run-codex"))
   "ACP harnesses, as (KEY . PLIST).
 :name is shown in prompts, :identifier and :mode-line tag the
 agent-shell config (:mode-line also lands in the transcript's
@@ -785,8 +793,8 @@ with prefix argument PROMPT-FOR-FILE, prompt for a project file."
 ;; ------------------------------------------------------------------
 
 (transient-define-prefix my-dsh-acp-menu ()
-  "ACP agents menu: DSH or Claude, chosen per command."
-  [["ACP agents (DSH / Claude)"
+  "ACP agents menu: DSH, Claude or Codex, chosen per command."
+  [["ACP agents (DSH / Claude / Codex)"
     ("r" "Run / focus agent" my-dsh-acp-open :transient nil)
     ("o" "Resume session by ID" my-dsh-acp-resume :transient nil)
     ("l" "List project sessions" my-dsh-acp-list-sessions :transient nil)

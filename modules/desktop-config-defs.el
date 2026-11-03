@@ -812,9 +812,10 @@ can take minutes; later starts answer in seconds."
   :group 'my-desktop)
 
 (defcustom my-desktop-enable-dsh-acp t
-  "Load desktop-dsh-acp: DSH / Claude ACP agents through agent-shell.
+  "Load desktop-dsh-acp: DSH / Claude / Codex ACP agents (agent-shell).
 Needs `agent-shell' (installed from MELPA) and the `run-dsh' /
-`run-claude' launchers with `--acp' support (sem-dev-container).
+`run-claude' / `run-codex' launchers with `--acp' support
+\(sem-dev-container).  A missing launcher only fails its own harness.
 The `C-c a d' menu asks which harness to use.  The old dsh-emacs
 web integration stays available through `C-c d'."
   :type 'boolean
@@ -856,14 +857,31 @@ config's default options, like
   :type '(alist :key-type string :value-type string)
   :group 'my-desktop)
 
+(defcustom my-desktop-codex-acp-command '("run-codex" "--acp")
+  "Command that starts the Codex ACP server (codex-acp) over stdio.
+The first element is resolved on `exec-path'; the rest are its
+arguments.  run-codex owns the container, project directory,
+credentials (the ChatGPT login in ~/.codex/auth.json) and
+environment."
+  :type '(repeat string)
+  :group 'my-desktop)
+
+(defcustom my-desktop-codex-acp-default-config-options nil
+  "Default ACP config options for new Codex ACP sessions.
+An alist of (OPTION . VALUE) with the option ids Codex advertises,
+for example ((\"reasoning_effort\" . \"high\")), passed to agent-shell
+like `my-desktop-dsh-acp-default-config-options'."
+  :type '(alist :key-type string :value-type string)
+  :group 'my-desktop)
+
 ;; ------------------------------------------------------------------
 ;; 9d. Multi-agent runs (desktop-mas) and podman helpers
 ;; ------------------------------------------------------------------
 
 (defcustom my-desktop-enable-mas t
   "Load desktop-mas: multi-agent flows (C-c a m) over the ACP agents.
-Needs desktop-dsh-acp (agent-shell + the run-dsh / run-claude
-launchers with --role/--outbox/--timeout support) and podman."
+Needs desktop-dsh-acp (agent-shell + the run-dsh / run-claude /
+run-codex launchers with --role/--outbox/--timeout support) and podman."
   :type 'boolean
   :group 'my-desktop)
 
@@ -905,7 +923,8 @@ and `before-archive' (openspec: before the change is archived)."
   '((openspec (lead . claude) (impl . dsh))
     (architecture (architect . claude) (critic . dsh)))
   "Harness playing each role of each multi-agent flow.
-An alist (FLOW (ROLE . HARNESS) ...); HARNESS is `claude' or `dsh'."
+An alist (FLOW (ROLE . HARNESS) ...); HARNESS is `claude', `codex'
+or `dsh'."
   :type '(alist :key-type symbol
                 :value-type (alist :key-type symbol :value-type symbol))
   :group 'my-desktop)

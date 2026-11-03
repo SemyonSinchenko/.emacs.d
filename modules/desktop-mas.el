@@ -2,9 +2,9 @@
 
 ;;; Commentary:
 ;; A small, deterministic orchestrator for two agents working on one
-;; project.  Emacs drives the loop; the agents (Claude and DSH, each in
-;; its own sem-dev-container container, shown side by side through
-;; agent-shell) only do or judge one step at a time.
+;; project.  Emacs drives the loop; the agents (Claude, Codex or DSH,
+;; each in its own sem-dev-container container, shown side by side
+;; through agent-shell) only do or judge one step at a time.
 ;;
 ;; Flows are data (`my-mas--flows'): a list of steps, each run by one
 ;; role, with transitions on the step's verdict.  Two flows exist:
@@ -19,9 +19,9 @@
 ;;                 critic approves.
 ;;
 ;; Roles are not tied to a harness: C-c a m o / a ask which ACP agent
-;; (Claude or DSH, see `my-dsh-acp--harnesses') plays each role, with
-;; `my-desktop-mas-roles' as the default (the defaults are shown in
-;; parentheses above).  Both roles may use the same harness.
+;; (Claude, Codex or DSH, see `my-dsh-acp--harnesses') plays each
+;; role, with `my-desktop-mas-roles' as the default (the defaults are
+;; shown in parentheses above).  Both roles may use the same harness.
 ;;
 ;; Steps hand off through files.  Every run has a folder
 ;; <project>/.mas/<run-id>/, mounted into both containers as the
@@ -128,7 +128,8 @@ the first step, :steps the steps as (STEP . PLIST):
 
 (defconst my-mas--worktree-excludes
   '(":(exclude).mas" ":(exclude).agent-shell"
-    ":(exclude).claude-container" ":(exclude).dsh")
+    ":(exclude).claude-container" ":(exclude).codex-container"
+    ":(exclude).dsh")
   "Pathspecs ignored by the reviewer worktree check.")
 
 (defconst my-mas--remove-delay 10
@@ -1114,7 +1115,7 @@ While an agent is still working, offer to re-send its step prompt."
   (my-mas--layout (my-mas--current-run)))
 
 (transient-define-prefix my-mas-menu ()
-  "Multi-agent runs (Claude + DSH)."
+  "Multi-agent runs (Claude / Codex / DSH)."
   [["Start"
     ("o" "openspec change" my-mas-openspec)
     ("a" "architecture decision" my-mas-architecture)]

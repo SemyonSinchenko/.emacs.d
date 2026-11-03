@@ -49,7 +49,7 @@ configurations**:
 │   ├── desktop-comms.el     # Telegram via telega (native or docker TDLib)
 │   ├── desktop-ai.el        # gptel assistant; per-chat folders + ai-chats.db state
 │   ├── desktop-dsh.el       # DSH web launcher + dsh-emacs client (fallback)
-│   ├── desktop-dsh-acp.el   # DSH / Claude ACP agents through agent-shell (default)
+│   ├── desktop-dsh-acp.el   # DSH / Claude / Codex ACP agents through agent-shell (default)
 │   ├── desktop-mas.el       # Multi-agent runs (C-c a m): openspec + architecture flows
 │   ├── desktop-podman.el    # C-c p podman helpers (container picker)
 │   ├── desktop-edit.el      # JSON/YAML/TOML/Markdown/CSV editing + apheleia
@@ -203,7 +203,7 @@ Always include `lexical-binding: t` at the top of every file.
   - `C-c s` - social prefix (b bluesky, h hackernews, l lemmy, r reddit,
     t telegram); `C-c K` - kitsu prefix (d dashboard, s search, t
     trending), bound only when `desktop-kitsu' is loaded;
-    `C-c a` - AI prefix (a chat; d ACP agents menu, DSH or Claude
+    `C-c a` - AI prefix (a chat; d ACP agents menu, DSH, Claude or Codex
     [r run/focus (asks the harness, always a new session), o resume
     by session ID, l list project sessions, s search project
     transcripts, k kill, R restart, n clear buffer, f send a file;
