@@ -921,7 +921,8 @@ and `before-archive' (openspec: before the change is archived)."
 
 (defcustom my-desktop-mas-roles
   '((openspec (lead . claude) (impl . dsh))
-    (architecture (architect . claude) (critic . dsh)))
+    (architecture (architect . claude) (critic . dsh))
+    (pair (implementer . dsh) (reviewer . claude)))
   "Harness playing each role of each multi-agent flow.
 An alist (FLOW (ROLE . HARNESS) ...); HARNESS is `claude', `codex'
 or `dsh'."
@@ -933,6 +934,46 @@ or `dsh'."
   (expand-file-name "mas-prompts" user-emacs-directory)
   "Directory of the multi-agent prompt templates (<flow>/<step>.md)."
   :type 'directory
+  :group 'my-desktop)
+
+(defcustom my-desktop-mas-run-dir-time-format "%Y-%m-%d-%H:%M:%S"
+  "`format-time-string' format of a run folder name.
+A run's folder is <project>/.mas/<time>-<flow>/."
+  :type 'string
+  :group 'my-desktop)
+
+(defcustom my-desktop-mas-pair-rounds '((plan . 10) (code . 10))
+  "Review rounds of the implementer + reviewer flow (C-c a m i), per phase.
+`plan': reviews of the plan; `code': reviews of the code.  A phase
+stops with status `limit' when the next round would exceed its value.
+The C-c a m i menu starts from these values."
+  :type '(alist :key-type symbol :value-type integer)
+  :group 'my-desktop)
+
+(defcustom my-desktop-mas-pair-reviewer-mount "overlay"
+  "Project mount of the reviewer in the implementer + reviewer flow.
+\"overlay\": the reviewer may build and run tests, but its writes never
+reach the project; \"ro\": read-only.  The C-c a m i menu starts from
+this value."
+  :type '(choice (const "overlay") (const "ro"))
+  :group 'my-desktop)
+
+(defcustom my-desktop-mas-pair-models nil
+  "Model per role of the implementer + reviewer flow, as (ROLE . MODEL).
+ROLE is `implementer' or `reviewer'; MODEL is the ACP `model' option
+value of the role's harness.  A missing role uses the harness default
+\(`my-desktop-dsh-acp-default-config-options' and friends).  The
+C-c a m i menu starts from these values."
+  :type '(alist :key-type symbol :value-type string)
+  :group 'my-desktop)
+
+(defcustom my-desktop-mas-model-choices nil
+  "Model suggestions per harness for the C-c a m i menu.
+An alist (HARNESS MODEL ...); HARNESS is `claude', `codex' or `dsh',
+MODEL an ACP `model' option value.  The menu also offers the
+harness's default model and accepts any other value; an agent that
+does not offer the model reports it and keeps its own."
+  :type '(alist :key-type symbol :value-type (repeat string))
   :group 'my-desktop)
 
 (defcustom my-desktop-mas-stop-agents-on-finish t

@@ -287,11 +287,20 @@
 ;;                  roasts it against the worktree (read-only), the
 ;;                  architect fixes or pushes back ... until the critic
 ;;                  approves.
-;;     Both commands ask which agent (Claude, Codex or DSH) plays each
-;;     role; defaults: lead/architect = Claude, impl/critic = DSH.
+;;       C-c a m i  implementer + reviewer: a menu (roles, models,
+;;                  reviewer mount, rounds; C-c RET starts).  You
+;;                  discuss the task with the implementer, C-c a m c
+;;                  starts the plan; the reviewer roasts it until it
+;;                  approves, the implementer presents it, C-c a m c
+;;                  approves (or re-reviews your adjustments); then
+;;                  code + review until the reviewer approves.  No
+;;                  commits.
+;;     o / a ask which agent (Claude, Codex or DSH) plays each role;
+;;     defaults: lead/architect = Claude, impl/critic = DSH,
+;;     implementer = DSH, reviewer = Claude.
 ;;       C-c a m s/c/p/k/l/r/m  status, continue, pause, abort, layout,
 ;;                  run folder/report, menu.
-;;     Results go to <project>/.mas/<run-id>/ (ignored through
+;;     Results go to <project>/.mas/<time>-<flow>/ (ignored through
 ;;     .git/info/exclude); prompts live in ~/.emacs.d/mas-prompts/.
 ;;     Needs run-dsh / run-claude / run-codex with --role/--outbox/
 ;;     --timeout and podman.  C-c p l lists running containers; RET copies the ID.
@@ -307,7 +316,19 @@
 ;; also play both roles:
 ;; (setq my-desktop-mas-roles
 ;;       '((openspec (lead . claude) (impl . dsh))
-;;         (architecture (architect . claude) (critic . dsh))))
+;;         (architecture (architect . claude) (critic . dsh))
+;;         (pair (implementer . dsh) (reviewer . claude))))
+;; Implementer + reviewer (C-c a m i) menu defaults: review rounds per
+;; phase, the reviewer's mount ("overlay": may build/test, writes never
+;; reach the project; "ro"), models per role (ACP "model" values; none:
+;; the harness default) and model suggestions per harness:
+(setq my-desktop-mas-pair-rounds '((plan . 10) (code . 10)))
+(setq my-desktop-mas-pair-reviewer-mount "overlay")
+;; (setq my-desktop-mas-pair-models '((reviewer . "<model id>")))
+;; (setq my-desktop-mas-model-choices
+;;       '((dsh "[\"deepseek-official\",\"deepseek-flash\"]")))
+;; Run folder name: .mas/<time>-<flow>/, time in this format:
+;; (setq my-desktop-mas-run-dir-time-format "%Y-%m-%d-%H:%M:%S")
 ;; Container lifetime backstop (seconds) and the still-working notice:
 ;; (setq my-desktop-mas-run-timeout (* 6 60 60))
 ;; (setq my-desktop-mas-turn-idle-timeout (* 15 60))

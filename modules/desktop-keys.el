@@ -136,6 +136,7 @@ Only populated when the pomodoro module is loaded.")
         ("z" . my-ai-usage))          ; Z-AI + DeepSeek + Claude usage
     (mas ("o" . my-mas-openspec)      ; openspec: plan, implement, review
          ("a" . my-mas-architecture)  ; design + roast until agreed
+         ("i" . my-mas-pair-menu)     ; implementer + reviewer (menu)
          ("s" . my-mas-status)
          ("c" . my-mas-continue)      ; past a gate or a pause
          ("p" . my-mas-pause)         ; after the current turn

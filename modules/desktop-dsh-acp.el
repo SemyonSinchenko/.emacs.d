@@ -192,13 +192,27 @@ launcher-side even when the configured command contains `--'."
      :command-params (append extra-args (cdr command))
      :context-buffer buffer)))
 
-(defun my-dsh-acp--agent-config (harness &optional extra-args buffer-name)
+(defun my-dsh-acp--merge-options (defaults overrides)
+  "Return the config options DEFAULTS with OVERRIDES applied on top.
+Both are alists of (OPTION . VALUE); an override replaces the default
+of the same option in place, new options go first (a model choice
+must precede the options scoped to it)."
+  (let ((merged (copy-alist defaults)))
+    (dolist (entry (reverse overrides))
+      (if-let* ((cell (assoc (car entry) merged)))
+          (setcdr cell (cdr entry))
+        (push (cons (car entry) (cdr entry)) merged)))
+    merged))
+
+(defun my-dsh-acp--agent-config (harness &optional extra-args buffer-name
+                                         config-options)
   "Return the agent-shell configuration for HARNESS.
 It starts from the stock agent-shell config of that agent (welcome
 art, icon and session meta), but gets its own identifier, buffer
 name, prompt and client maker.  EXTRA-ARGS are passed to the
 launcher (see `my-dsh-acp--make-client'); BUFFER-NAME replaces the
-harness name as the agent-shell buffer name."
+harness name as the agent-shell buffer name; CONFIG-OPTIONS override
+the harness's default ACP config options (e.g. its model)."
   (my-dsh-acp--require-agent-shell)
   (let* ((name (my-dsh-acp--harness-name harness))
          (prompt (concat name "> "))
@@ -214,7 +228,8 @@ harness name as the agent-shell buffer name."
           (alist-get :client-maker config)
           (lambda (buffer) (my-dsh-acp--make-client buffer harness extra-args))
           (alist-get :default-config-options config)
-          (lambda () (symbol-value options-var))
+          (lambda () (my-dsh-acp--merge-options (symbol-value options-var)
+                                                config-options))
           (alist-get :install-instructions config)
           (format "Install %s from sem-dev-container on `exec-path'; the
 image must provide `%s --acp'."
@@ -339,12 +354,14 @@ install it from sem-dev-container"
 
 ;;;###autoload
 (cl-defun my-dsh-acp-start-owned (&key root harness owner extra-args
-                                       buffer-name)
+                                       buffer-name config-options)
   "Start a HARNESS agent-shell for ROOT in the background; return it.
 The shell is marked as owned by OWNER (see `my-dsh-acp-owner'), so
-the C-c a d commands ignore it.  EXTRA-ARGS are launcher options and
-BUFFER-NAME the agent-shell buffer name.  Always a new session; the
-buffer is not displayed (the owner lays out its windows)."
+the C-c a d commands ignore it.  EXTRA-ARGS are launcher options,
+BUFFER-NAME the agent-shell buffer name and CONFIG-OPTIONS ACP config
+options over the harness defaults, as (OPTION . VALUE).  Always a new
+session; the buffer is not displayed (the owner lays out its
+windows)."
   (unless owner
     (error "my-dsh-acp-start-owned: OWNER is required"))
   (let ((command (my-dsh-acp--harness-command harness))
@@ -360,7 +377,7 @@ install it from sem-dev-container"
          (agent-shell-session-strategy 'new)
          (buffer (agent-shell--start
                   :config (my-dsh-acp--agent-config harness extra-args
-                                                    buffer-name)
+                                                    buffer-name config-options)
                   :no-focus t
                   :new-session t
                   :cwd root)))

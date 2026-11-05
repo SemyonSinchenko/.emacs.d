@@ -21,6 +21,19 @@
 ;;                 roasts it against the current worktree (read-only
 ;;                 mount), architect fixes or pushes back, ... until the
 ;;                 critic approves.
+;;   pair          (C-c a m i, a menu of roles, models, mount and rounds)
+;;                 you discuss the task with the implementer (DSH), C-c
+;;                 a m c starts planning: it writes brief.md + plan.md
+;;                 in the run folder, the reviewer (Claude, overlay
+;;                 mount: may build and test, writes never reach the
+;;                 project) roasts the plan, ... until it approves; the
+;;                 implementer presents the plan and C-c a m c asks you:
+;;                 approve (coding starts), re-review your adjustments,
+;;                 or abort.  Then the implementer codes and the
+;;                 reviewer reviews until it approves.  Each phase has
+;;                 its own round limit (`my-desktop-mas-pair-rounds');
+;;                 the reviewer may approve only when every finding,
+;;                 minor ones included, is resolved or conceded.
 ;;
 ;; Roles are not tied to a harness: C-c a m o / a ask which ACP agent
 ;; (Claude, Codex or DSH, see `my-dsh-acp--harnesses') plays each
@@ -28,14 +41,20 @@
 ;; shown in parentheses above).  Both roles may use the same harness.
 ;;
 ;; Steps hand off through files.  Every run has a folder
-;; <project>/.mas/<run-id>/, mounted into both containers as the
+;; <project>/.mas/<time>-<flow>/ (`my-desktop-mas-run-dir-time-format'),
+;; mounted into both containers as the
 ;; launcher's --outbox; each step must write one JSON result file
 ;; there (see mas-prompts/schema.md).  A step is complete when the
 ;; agent's turn ends (`turn-complete', stop reason end_turn) and its
 ;; file parses and validates; otherwise the agent gets one reminder and
 ;; then the run pauses.  Only one agent works at a time.
 ;;
-;; Safeguards: `my-desktop-mas-max-iterations' review rounds, a stall
+;; Discussion steps (:discuss) hand the agent to you instead: Emacs
+;; sends one prompt, ignores the turns of your chat, and goes on when
+;; you press C-c a m c.
+;;
+;; Safeguards: `my-desktop-mas-max-iterations' review rounds (per phase
+;; limits in the pair flow), a stall
 ;; check (`my-desktop-mas-stall-rounds'), gates
 ;; (`my-desktop-mas-gates'), and in the openspec flow a worktree check
 ;; that the reviewer did not edit project files.
@@ -105,6 +124,52 @@
                :input "response-{{prev_n}}.json"
                :output "roast-{{n}}.json"
                :on ((approve . report) (changes_requested . respond)))
+      (report :report t)))
+    (pair
+     :title "implementer + reviewer"
+     :mounts ((implementer . "rw") (reviewer . "overlay"))
+     :start discuss
+     :steps
+     ((discuss :role implementer :prompt "discuss" :discuss t :phase plan
+               :next plan)
+      (plan :role implementer :prompt "plan" :phase plan :tamper t
+            :output "plan.json" :next plan-roast)
+      (plan-roast :role reviewer :prompt "plan-roast" :phase plan
+                  :critique t :approve-clean t :tamper t
+                  :output "plan-roast-{{n}}.json"
+                  :on ((approve . present) (changes_requested . plan-respond)))
+      (plan-respond :role implementer :prompt "plan-respond" :phase plan
+                    :answers t :tamper t
+                    :input "plan-roast-{{n}}.json"
+                    :output "plan-response-{{n}}.json" :next plan-reroast)
+      (plan-reroast :role reviewer :prompt "plan-reroast" :phase plan
+                    :critique t :approve-clean t :tamper t :bump t
+                    :input "plan-response-{{prev_n}}.json"
+                    :output "plan-roast-{{n}}.json"
+                    :on ((approve . present)
+                         (changes_requested . plan-respond)))
+      (present :role implementer :prompt "present" :discuss t :phase plan
+               :tamper t
+               :choices ((?a "approve" implement "start coding")
+                         (?r "re-review" plan-amend
+                             "the reviewer checks your adjustments" round)
+                         (?k "abort" abort "stop both agents")))
+      (plan-amend :role implementer :prompt "plan-amend" :phase plan
+                  :tamper t :output "plan-response-{{n}}.json"
+                  :next plan-reroast)
+      (implement :role implementer :prompt "implement" :phase code
+                 :output "impl-{{n}}.json" :next review)
+      (review :role reviewer :prompt "review" :phase code
+              :critique t :approve-clean t :tamper t
+              :input "impl-{{n}}.json" :output "review-{{n}}.json"
+              :on ((approve . report) (changes_requested . fix)))
+      (fix :role implementer :prompt "fix" :phase code :answers t
+           :input "review-{{n}}.json" :output "fix-{{n}}.json"
+           :next rereview)
+      (rereview :role reviewer :prompt "rereview" :phase code
+                :critique t :approve-clean t :tamper t :bump t
+                :input "fix-{{prev_n}}.json" :output "review-{{n}}.json"
+                :on ((approve . report) (changes_requested . fix)))
       (report :report t))))
   "Multi-agent flows, as (FLOW . PLIST).
 :mounts gives each role's project mount (rw, ro or overlay), :start
@@ -127,6 +192,15 @@ the first step, :steps the steps as (STEP . PLIST):
   :capture  result fields stored as template variables
   :gate     wait for `my-mas-continue' when the gate is in
             `my-desktop-mas-gates'
+  :discuss  send the prompt, then let the operator chat with the agent
+            (no result file); `my-mas-continue' ends the step and goes
+            to :next, or asks among :choices, as (KEY NAME NEXT
+            DESCRIPTION [round]): NEXT `abort' aborts the run, `round'
+            hides the choice once the phase's rounds are used up
+  :phase    the round counter's phase; entering a new phase restarts
+            the count, with the phase's own limit (see `my-mas--max')
+  :approve-clean  `approve' is accepted only without open findings,
+            minor ones included
   :report   write the report and finish")
 
 (defconst my-mas--critique-verdicts '("approve" "changes_requested" "blocked")
@@ -192,7 +266,8 @@ containers with separate --role state)."
                           (:copier nil))
   id flow roles root dir params status step (n 1) reason pending
   agents waiting history last-critique open-prev (stall 0)
-  snapshot pause-requested started idle-timer stopping)
+  snapshot pause-requested started idle-timer stopping
+  phase limits mounts options)
 
 (defvar my-mas--runs nil
   "Runs whose agents are still alive (one per project).")
@@ -257,6 +332,17 @@ containers with separate --role state)."
                          (time-subtract nil (my-mas-run-started run))))))
     (format "%d:%02d" (/ secs 3600) (/ (% secs 3600) 60))))
 
+(defun my-mas--max (run)
+  "Return the review-round limit of RUN's current phase.
+The run's own limits (the C-c a m i menu) win; flows without phases
+use `my-desktop-mas-max-iterations'."
+  (or (alist-get (my-mas-run-phase run) (my-mas-run-limits run))
+      my-desktop-mas-max-iterations))
+
+(defun my-mas--rounds-left-p (run)
+  "Non-nil when RUN's current phase may take another review round."
+  (< (my-mas-run-n run) (my-mas--max run)))
+
 ;; ------------------------------------------------------------------
 ;; Notices and mode line
 ;; ------------------------------------------------------------------
@@ -275,14 +361,19 @@ containers with separate --role state)."
     (cond
      ((and (eq (my-mas-run-status run) 'running) waiting)
       (format "%s→%s" (my-mas-run-step run) (plist-get waiting :role)))
+     ((eq (my-mas-run-status run) 'discuss)
+      (format "%s→you" (my-mas-run-step run)))
      (t (symbol-name (my-mas-run-status run))))))
 
 (defun my-mas--mode-line ()
   "Mode-line segment of the run of this agent buffer."
   (when (my-mas-run-p my-mas--run)
-    (format " MAS[%s %d/%d %s]"
+    (format " MAS[%s%s %d/%d %s]"
             (my-mas-run-flow my-mas--run)
-            (my-mas-run-n my-mas--run) my-desktop-mas-max-iterations
+            (if-let* ((phase (my-mas-run-phase my-mas--run)))
+                (format ":%s" phase)
+              "")
+            (my-mas-run-n my-mas--run) (my-mas--max my-mas--run)
             (my-mas--state-label my-mas--run))))
 
 (defun my-mas--refresh (run)
@@ -334,12 +425,13 @@ containers with separate --role state)."
                   ("flow" . ,(symbol-name (my-mas-run-flow run)))
                   ("n" . ,(number-to-string n))
                   ("prev_n" . ,(number-to-string (1- n)))
-                  ("max" . ,(number-to-string my-desktop-mas-max-iterations)))
+                  ("max" . ,(number-to-string (my-mas--max run))))
                 (my-mas-run-params run)))
-         (output (my-mas--render (plist-get def :output) vars))
+         (output (when-let* ((output (plist-get def :output)))
+                   (my-mas--render output vars)))
          (input (when-let* ((input (plist-get def :input)))
                   (my-mas--render input vars))))
-    (setq vars (append `(("artifact" . ,(my-mas--file run output))
+    (setq vars (append `(("artifact" . ,(if output (my-mas--file run output) ""))
                          ("input" . ,(if input (my-mas--file run input) "")))
                        vars))
     (cons (cons "schema"
@@ -406,6 +498,13 @@ containers with separate --role state)."
       (format "the field(s) %s must be a kebab-case string"
               (mapconcat (lambda (f) (format "\"%s\"" f))
                          (plist-get def :capture) ", ")))
+     ((and (plist-get def :approve-clean)
+           (equal verdict "approve")
+           (my-mas--open-findings data))
+      (format "\"approve\" leaves open findings (%s); minor ones count \
+too: mark each one resolved or conceded, or report changes_requested"
+              (mapconcat (lambda (f) (alist-get 'id f))
+                         (my-mas--open-findings data) ", ")))
      ((plist-get def :answers)
       (let* ((input (cdr (assoc "input" (my-mas--vars run def))))
              (asked (pcase (my-mas--json-read input)
@@ -427,8 +526,11 @@ containers with separate --role state)."
              (project . ,(my-mas-run-root run))
              (status . ,(symbol-name (my-mas-run-status run)))
              (step . ,(symbol-name (my-mas-run-step run)))
+             (phase . ,(if (my-mas-run-phase run)
+                           (symbol-name (my-mas-run-phase run))
+                         ""))
              (iteration . ,(my-mas-run-n run))
-             (max_iterations . ,my-desktop-mas-max-iterations)
+             (max_iterations . ,(my-mas--max run))
              (reason . ,(or (my-mas-run-reason run) ""))
              (started . ,(format-time-string "%FT%T%z"
                                              (my-mas-run-started run)))
@@ -443,7 +545,7 @@ containers with separate --role state)."
                               (role . ,(symbol-name (plist-get h :role)))
                               (iteration . ,(plist-get h :n))
                               (verdict . ,(plist-get h :verdict))
-                              (file . ,(plist-get h :file))
+                              (file . ,(or (plist-get h :file) ""))
                               (time . ,(plist-get h :time))))
                           (reverse (my-mas-run-history run))))))))
       (with-temp-file (my-mas--file run "run.json")
@@ -511,7 +613,8 @@ EXCLUDES are extra pathspecs to ignore."
 
 (defun my-mas--launcher-args (run role)
   "Return the launcher options of ROLE's container in RUN."
-  (let ((mount (or (alist-get role (plist-get (my-mas--flow (my-mas-run-flow run))
+  (let ((mount (or (alist-get role (my-mas-run-mounts run))
+                   (alist-get role (plist-get (my-mas--flow (my-mas-run-flow run))
                                               :mounts))
                    "rw"))
         (id (my-mas-run-id run)))
@@ -605,6 +708,15 @@ EXCLUDES are extra pathspecs to ignore."
   "Return TEXT as a one-line org table cell."
   (replace-regexp-in-string "[|\n\r]+" " " (or text "")))
 
+(defun my-mas--phase-rounds (run phase)
+  "Return the review rounds RUN took in PHASE (0 if it never got there)."
+  (let ((rounds 0))
+    (dolist (h (my-mas-run-history run) rounds)
+      (when (and (eq (plist-get h :phase) phase)
+                 (plist-get (my-mas--step-def run (plist-get h :step))
+                            :critique))
+        (setq rounds (max rounds (plist-get h :n)))))))
+
 (defun my-mas--write-report (run)
   "Write report.org for RUN; return its path."
   (let ((file (my-mas--file run "report.org"))
@@ -621,20 +733,30 @@ EXCLUDES are extra pathspecs to ignore."
                                  (my-mas-run-roles run) ", ")))
       (dolist (param (my-mas-run-params run))
         (insert (format "- %s :: %s\n" (car param) (cdr param))))
-      (insert (format "- Iterations :: %d / %d\n" (my-mas-run-n run)
-                      my-desktop-mas-max-iterations))
+      (if (my-mas-run-limits run)
+          (insert (format "- Rounds :: %s\n"
+                          (mapconcat
+                           (lambda (limit)
+                             (format "%s %d / %d" (car limit)
+                                     (my-mas--phase-rounds run (car limit))
+                                     (cdr limit)))
+                           (my-mas-run-limits run) ", ")))
+        (insert (format "- Iterations :: %d / %d\n" (my-mas-run-n run)
+                        (my-mas--max run))))
       (insert (format "- Duration :: %s\n" (my-mas--elapsed run)))
       (insert "\n* Steps\n\n| # | Step | Agent | Verdict | Summary | File |\n")
       (insert "|---+------+-------+---------+---------+------|\n")
       (let ((i 0))
         (dolist (h (reverse (my-mas-run-history run)))
-          (insert (format "| %d | %s | %s | %s | %s | [[file:%s][%s]] |\n"
+          (insert (format "| %d | %s | %s | %s | %s | %s |\n"
                           (cl-incf i) (plist-get h :step)
                           (my-mas--role-label run (plist-get h :role))
                           (plist-get h :verdict)
                           (my-mas--cell (plist-get h :summary))
-                          (plist-get h :file)
-                          (file-name-nondirectory (plist-get h :file))))))
+                          (if-let* ((file (plist-get h :file)))
+                              (format "[[file:%s][%s]]" file
+                                      (file-name-nondirectory file))
+                            "")))))
       (let ((open (and critique (my-mas--open-findings critique))))
         (insert (format "\n* Open findings (%d)\n\n" (length open)))
         (dolist (f open)
@@ -652,7 +774,13 @@ them yourself (C-c g g).\n"))
         ('architecture
          (insert (format "Design file: [[file:%s]]\n"
                          (cdr (assoc "design_file"
-                                     (my-mas-run-params run)))))))
+                                     (my-mas-run-params run))))))
+        ('pair
+         (insert (format "Brief: [[file:%s]], plan: [[file:%s]]\n\n"
+                         (my-mas--file run "brief.md")
+                         (my-mas--file run "plan.md")))
+         (insert "Nothing was committed.  Review the diff (C-c g) and \
+commit it yourself.\n")))
       (insert "\nTranscripts: .agent-shell/transcripts/ in the project.\n"))
     file))
 
@@ -699,9 +827,14 @@ FORCE-STOP is non-nil."
   (let ((def (my-mas--step-def run step)))
     (setf (my-mas-run-step run) step
           (my-mas-run-reason run) nil)
+    (when-let* ((phase (plist-get def :phase))
+                ((not (eq phase (my-mas-run-phase run)))))
+      (my-mas--enter-phase run phase))
     (cond
      ((plist-get def :report)
       (my-mas--finish run 'done))
+     ((plist-get def :discuss)
+      (my-mas--discuss run step))
      ((plist-get def :gate)
       (if (memq (plist-get def :gate) my-desktop-mas-gates)
           (progn
@@ -713,15 +846,110 @@ FORCE-STOP is non-nil."
             (my-mas--notify "%s waits at gate %s: check the work, then \
 C-c a m c" (my-mas-run-id run) (plist-get def :gate)))
         (my-mas--run-step run (plist-get def :next))))
-     ((and (plist-get def :bump)
-           (>= (my-mas-run-n run) my-desktop-mas-max-iterations))
+     ((and (plist-get def :bump) (not (my-mas--rounds-left-p run)))
       (my-mas--finish run 'limit
-                      (format "%d review rounds without agreement"
-                              (my-mas-run-n run))))
+                      (format "%d %sreview rounds without agreement"
+                              (my-mas-run-n run)
+                              (if (my-mas-run-phase run)
+                                  (format "%s " (my-mas-run-phase run))
+                                ""))))
      (t
       (when (plist-get def :bump)
         (cl-incf (my-mas-run-n run)))
       (my-mas--send run step)))))
+
+(defun my-mas--enter-phase (run phase)
+  "Start PHASE of RUN: a fresh round count, stall check and critique."
+  (setf (my-mas-run-phase run) phase
+        (my-mas-run-n run) 1
+        (my-mas-run-stall run) 0
+        (my-mas-run-open-prev run) nil
+        (my-mas-run-last-critique run) nil))
+
+(defun my-mas--discuss (run step)
+  "Send discussion STEP's prompt in RUN, then leave the agent to the operator.
+No result file is expected and turns are not watched (the status is
+`discuss'); `my-mas-continue' ends the step."
+  (let* ((def (my-mas--step-def run step))
+         (role (plist-get def :role))
+         (buffer (my-mas--agent run role))
+         (vars (my-mas--vars run def)))
+    (if (not (buffer-live-p buffer))
+        (my-mas--finish run 'aborted (format "the %s agent is gone" role) t)
+      (when (plist-get def :tamper)
+        (setf (my-mas-run-snapshot run)
+              (my-mas--worktree-snapshot
+               (my-mas-run-root run) (my-mas--tamper-excludes def vars))))
+      (setf (my-mas-run-status run) 'discuss
+            (my-mas-run-waiting run) nil
+            (my-mas-run-pending run) nil)
+      (my-mas--save run)
+      (my-mas--refresh run)
+      (condition-case err
+          (progn
+            (with-current-buffer buffer
+              (agent-shell-insert
+               :text (my-mas--render (my-mas--template
+                                      (my-mas-run-flow run)
+                                      (plist-get def :prompt))
+                                     vars)
+               :submit t :no-focus t :shell-buffer buffer))
+            (when-let* ((window (get-buffer-window buffer)))
+              (select-window window))
+            (my-mas--notify "%s: talk to the %s; C-c a m c when you are \
+done" (my-mas-run-id run) (my-mas--role-label run role)))
+        (error
+         (my-mas--pause run (format "could not send %s to %s: %s" step
+                                    (my-mas--role-label run role)
+                                    (error-message-string err))
+                        (lambda () (my-mas--discuss run step))))))))
+
+(defun my-mas--read-choice (run def)
+  "Ask the operator for the next step after discussion step DEF of RUN.
+Return :next when DEF has no :choices.  A choice marked `round' is
+offered only while the phase has review rounds left."
+  (if-let* ((choices (plist-get def :choices)))
+      (let* ((offered (seq-filter (lambda (c)
+                                    (or (not (eq (nth 4 c) 'round))
+                                        (my-mas--rounds-left-p run)))
+                                  choices))
+             (answer (read-multiple-choice
+                      (format "MAS %s%s" (my-mas-run-step run)
+                              (if (= (length offered) (length choices))
+                                  ""
+                                (format " (%s rounds used up)"
+                                        (my-mas-run-phase run))))
+                      (mapcar (lambda (c) (list (nth 0 c) (nth 1 c) (nth 3 c)))
+                              offered))))
+        (cons (nth 2 (assq (car answer) offered)) (nth 1 answer)))
+    (cons (plist-get def :next) "done")))
+
+(defun my-mas--end-discussion (run)
+  "End RUN's discussion step: check the worktree, then go on.
+Quitting the choice prompt keeps the discussion open."
+  (let* ((step (my-mas-run-step run))
+         (def (my-mas--step-def run step))
+         (role (plist-get def :role))
+         (choice (my-mas--read-choice run def))
+         (changes (and (plist-get def :tamper)
+                       (my-mas--worktree-changes
+                        (my-mas-run-snapshot run)
+                        (my-mas--worktree-snapshot
+                         (my-mas-run-root run)
+                         (my-mas--tamper-excludes
+                          def (my-mas--vars run def)))))))
+    (when (and changes
+               (not (y-or-n-p (format "%s changed project files during %s: \
+%s.  Go on anyway? " (my-mas--role-label run role) step changes))))
+      (user-error "MAS: still in %s" step))
+    (push (list :step step :role role :n (my-mas-run-n run)
+                :phase (my-mas-run-phase run) :verdict (cdr choice)
+                :summary "operator" :time (format-time-string "%FT%T%z"))
+          (my-mas-run-history run))
+    (setf (my-mas-run-status run) 'running)
+    (if (eq (car choice) 'abort)
+        (my-mas--finish run 'aborted "aborted by the operator" t)
+      (my-mas--run-step run (car choice)))))
 
 (defun my-mas--start-idle-timer (run)
   "Start the repeating still-working notice of RUN's current step."
@@ -834,6 +1062,7 @@ Do not redo the work itself."
                         (assoc-delete-all (symbol-name field)
                                           (my-mas-run-params run)))))
           (push (list :step step :role role :n (my-mas-run-n run)
+                      :phase (my-mas-run-phase run)
                       :verdict (alist-get 'verdict data)
                       :summary (alist-get 'summary data)
                       :file output
@@ -944,10 +1173,12 @@ Do not redo the work itself."
 killed" role)
                                         t)))))))))
 
-(defun my-mas--start (flow params &optional roles)
+(defun my-mas--start (flow params &optional roles settings)
   "Start a FLOW run in the current project with PARAMS (string alist).
 ROLES maps each role to a harness, as (ROLE . HARNESS); it defaults to
-FLOW's entry in `my-desktop-mas-roles'."
+FLOW's entry in `my-desktop-mas-roles'.  SETTINGS is a plist of
+per-run overrides: :limits (PHASE . ROUNDS), :mounts (ROLE . MOUNT)
+and :options (ROLE . ACP-CONFIG-OPTIONS)."
   (my-dsh-acp--require-agent-shell)
   (unless (my-mas--podman)
     (user-error "MAS: `%s' not found; the agents need podman"
@@ -955,14 +1186,25 @@ FLOW's entry in `my-desktop-mas-roles'."
   (let* ((root (my-dsh-acp--project-root))
          (roles (my-mas--check-roles
                  flow (or roles (my-mas--flow-roles flow))))
-         (id (format "%s-%s" (format-time-string "%Y%m%d-%H%M%S") flow))
+         (now (current-time))
+         ;; Container names and labels take no colons; the folder name
+         ;; follows `my-desktop-mas-run-dir-time-format'.
+         (id (format "%s-%s" (format-time-string "%Y%m%d-%H%M%S" now) flow))
          (run (my-mas--make-run
                :id id :flow flow :roles roles :root root
                :dir (file-name-as-directory
-                     (expand-file-name (concat ".mas/" id) root))
+                     (expand-file-name
+                      (format ".mas/%s-%s"
+                              (format-time-string
+                               my-desktop-mas-run-dir-time-format now)
+                              flow)
+                      root))
                :params params :status 'starting
                :step (plist-get (my-mas--flow flow) :start)
-               :started (current-time))))
+               :limits (plist-get settings :limits)
+               :mounts (plist-get settings :mounts)
+               :options (plist-get settings :options)
+               :started now)))
     (when-let* ((other (my-mas--run-for-root root)))
       (user-error "MAS: run %s is still active in this project \
 \(C-c a m k aborts it)" (my-mas-run-id other)))
@@ -976,6 +1218,8 @@ FLOW's entry in `my-desktop-mas-roles'."
                  (buffer (my-dsh-acp-start-owned
                           :root root :harness harness :owner id
                           :extra-args (my-mas--launcher-args run role)
+                          :config-options (alist-get role
+                                                     (my-mas-run-options run))
                           :buffer-name (format "%s MAS %s"
                                                (my-dsh-acp--harness-name
                                                 harness)
@@ -992,9 +1236,12 @@ FLOW's entry in `my-desktop-mas-roles'."
                        t)
        (signal (car err) (cdr err))))
     (my-mas--layout run)
-    (my-mas--notify "%s started (%s); max %d rounds" id
+    (my-mas--notify "%s started (%s); max %s rounds" id
                     (plist-get (my-mas--flow flow) :title)
-                    my-desktop-mas-max-iterations)
+                    (if-let* ((limits (my-mas-run-limits run)))
+                        (mapconcat (lambda (l) (format "%d %s" (cdr l) (car l)))
+                                   limits ", ")
+                      my-desktop-mas-max-iterations))
     (my-mas--run-step run (my-mas-run-step run))
     run))
 
@@ -1053,6 +1300,256 @@ Interactively, ask which harness plays each role; ROLES is
                                    ("design_file" . ,file))
                    roles)))
 
+(defconst my-mas--no-task
+  "(none yet: ask the operator what to build)"
+  "Task text of a pair run started without one.")
+
+(defun my-mas--model-options (models)
+  "Return per-role ACP config options for MODELS, as (ROLE . MODEL).
+Roles without a model (nil or empty) keep their harness default."
+  (delq nil (mapcar (lambda (entry)
+                      (when (and (stringp (cdr entry))
+                                 (not (string-empty-p (cdr entry))))
+                        (list (car entry) (cons "model" (cdr entry)))))
+                    models)))
+
+;;;###autoload
+(defun my-mas-pair (task &optional roles settings)
+  "Run the implementer + reviewer flow on TASK in this project.
+You discuss TASK with the implementer first; `my-mas-continue' starts
+the plan, which the reviewer roasts until it approves.  The
+implementer then presents the plan; once you approve it, it writes the
+code and the reviewer reviews it until it approves.  Nothing is
+committed.  TASK may be empty (the implementer asks).  ROLES is
+\(ROLE . HARNESS), default `my-desktop-mas-roles'; SETTINGS overrides
+the per-run settings (see `my-mas--start'), defaulting to
+`my-desktop-mas-pair-rounds', `my-desktop-mas-pair-reviewer-mount' and
+`my-desktop-mas-pair-models'.  Interactively, use the menu
+`my-mas-pair-menu' (C-c a m i)."
+  (interactive (list (read-string "Task (empty: discuss it first): ")))
+  (let ((mount (or (plist-get settings :mounts)
+                   `((reviewer . ,my-desktop-mas-pair-reviewer-mount)))))
+    (unless (member (alist-get 'reviewer mount) '("overlay" "ro"))
+      (user-error "MAS: the reviewer mount must be overlay or ro, not %S"
+                  (alist-get 'reviewer mount)))
+    (my-mas--start
+     'pair `(("task" . ,(if (string-empty-p (string-trim task))
+                            my-mas--no-task
+                          (string-trim task))))
+     roles
+     (list :limits (or (plist-get settings :limits)
+                       (copy-alist my-desktop-mas-pair-rounds))
+           :mounts mount
+           :options (or (plist-get settings :options)
+                        (my-mas--model-options my-desktop-mas-pair-models))))))
+
+;; The C-c a m i menu: settings of the next pair run, gptel-menu style.
+
+(defvar my-mas--pair-settings nil
+  "Settings of the next pair run, edited in `my-mas-pair-menu'.
+A plist (:task :roles :models :limits :mount); nil until the menu
+first opens, then kept for the session (D resets it).")
+
+(defun my-mas--pair-defaults ()
+  "Return the pair-run settings from the user configuration."
+  (list :task ""
+        :roles (copy-alist (my-mas--flow-roles 'pair))
+        :models (copy-alist my-desktop-mas-pair-models)
+        :limits (copy-alist my-desktop-mas-pair-rounds)
+        :mount my-desktop-mas-pair-reviewer-mount))
+
+(defun my-mas--pair-get (key)
+  "Return setting KEY of the next pair run."
+  (unless my-mas--pair-settings
+    (setq my-mas--pair-settings (my-mas--pair-defaults)))
+  (plist-get my-mas--pair-settings key))
+
+(defun my-mas--pair-put (key value)
+  "Set setting KEY of the next pair run to VALUE."
+  (my-mas--pair-get key)
+  (setq my-mas--pair-settings (plist-put my-mas--pair-settings key value)))
+
+(defun my-mas--pair-harness-default-model (harness)
+  "Return HARNESS's default model option, or nil."
+  (cdr (assoc "model" (symbol-value
+                       (my-dsh-acp--harness-get harness :options-var)))))
+
+(defun my-mas--pair-value (text)
+  "Return TEXT in the transient value face."
+  (propertize text 'face 'transient-value))
+
+(defun my-mas--pair-describe-harness (role)
+  "Menu label of ROLE's harness."
+  (format "%-12s %s" (capitalize (symbol-name role))
+          (my-mas--pair-value
+           (my-dsh-acp--harness-name
+            (alist-get role (my-mas--pair-get :roles))))))
+
+(defun my-mas--pair-describe-model (role)
+  "Menu label of ROLE's model."
+  (let ((model (alist-get role (my-mas--pair-get :models))))
+    (format "%-12s %s" "  model"
+            (if (and model (not (string-empty-p model)))
+                (my-mas--pair-value model)
+              (propertize
+               (format "%s (harness default)"
+                       (or (my-mas--pair-harness-default-model
+                            (alist-get role (my-mas--pair-get :roles)))
+                           "agent's own"))
+               'face 'transient-inactive-value)))))
+
+(defun my-mas--pair-read-harness (role)
+  "Ask for ROLE's harness; a new harness drops ROLE's model."
+  (let* ((choices (mapcar (lambda (entry)
+                            (cons (plist-get (cdr entry) :name) (car entry)))
+                          my-dsh-acp--harnesses))
+         (completion-extra-properties '(:display-sort-function identity))
+         (current (alist-get role (my-mas--pair-get :roles)))
+         (harness (cdr (assoc (completing-read
+                               (format-prompt "%s" (my-dsh-acp--harness-name
+                                                    current)
+                                              (capitalize (symbol-name role)))
+                               choices nil t nil nil
+                               (my-dsh-acp--harness-name current))
+                              choices)))
+         (roles (copy-alist (my-mas--pair-get :roles))))
+    (unless (eq harness current)
+      (setf (alist-get role roles) harness)
+      (my-mas--pair-put :roles roles)
+      (my-mas--pair-put :models (assq-delete-all
+                                 role (copy-alist (my-mas--pair-get :models)))))))
+
+(defun my-mas--pair-read-model (role)
+  "Ask for ROLE's model; empty input means the harness default."
+  (let* ((harness (alist-get role (my-mas--pair-get :roles)))
+         (models (copy-alist (my-mas--pair-get :models)))
+         (choices (delete-dups
+                   (delq nil (cons (my-mas--pair-harness-default-model harness)
+                                   (alist-get harness
+                                              my-desktop-mas-model-choices)))))
+         (model (string-trim
+                 (completing-read
+                  (format "%s model (%s; empty: harness default): "
+                          (capitalize (symbol-name role))
+                          (my-dsh-acp--harness-name harness))
+                  choices nil nil (alist-get role models)))))
+    (setf (alist-get role models nil t) (and (not (string-empty-p model))
+                                             model))
+    (my-mas--pair-put :models models)))
+
+(defun my-mas--pair-read-rounds (phase)
+  "Ask for the review-round limit of PHASE."
+  (let ((limits (copy-alist (my-mas--pair-get :limits)))
+        (rounds (read-number (format "%s review rounds: "
+                                     (capitalize (symbol-name phase)))
+                             (alist-get phase (my-mas--pair-get :limits)))))
+    (unless (and (integerp rounds) (> rounds 0))
+      (user-error "MAS: rounds must be a positive integer"))
+    (setf (alist-get phase limits) rounds)
+    (my-mas--pair-put :limits limits)))
+
+(defun my-mas-pair-set-task ()
+  "Set the task of the next pair run (empty: discuss it first)."
+  (interactive)
+  (my-mas--pair-put :task (read-string "Task (empty: discuss it first): "
+                                       (my-mas--pair-get :task))))
+
+(defun my-mas-pair-set-implementer ()
+  "Set the implementer's harness of the next pair run."
+  (interactive)
+  (my-mas--pair-read-harness 'implementer))
+
+(defun my-mas-pair-set-implementer-model ()
+  "Set the implementer's model of the next pair run."
+  (interactive)
+  (my-mas--pair-read-model 'implementer))
+
+(defun my-mas-pair-set-reviewer ()
+  "Set the reviewer's harness of the next pair run."
+  (interactive)
+  (my-mas--pair-read-harness 'reviewer))
+
+(defun my-mas-pair-set-reviewer-model ()
+  "Set the reviewer's model of the next pair run."
+  (interactive)
+  (my-mas--pair-read-model 'reviewer))
+
+(defun my-mas-pair-toggle-mount ()
+  "Switch the reviewer's project mount between overlay and ro."
+  (interactive)
+  (my-mas--pair-put :mount (if (equal (my-mas--pair-get :mount) "overlay")
+                               "ro"
+                             "overlay")))
+
+(defun my-mas-pair-set-plan-rounds ()
+  "Set the plan review-round limit of the next pair run."
+  (interactive)
+  (my-mas--pair-read-rounds 'plan))
+
+(defun my-mas-pair-set-code-rounds ()
+  "Set the code review-round limit of the next pair run."
+  (interactive)
+  (my-mas--pair-read-rounds 'code))
+
+(defun my-mas-pair-reset ()
+  "Reset the next pair run's settings to the configured defaults."
+  (interactive)
+  (setq my-mas--pair-settings (my-mas--pair-defaults)))
+
+(defun my-mas-pair-start ()
+  "Start a pair run with the settings of `my-mas-pair-menu'."
+  (interactive)
+  (my-mas-pair (my-mas--pair-get :task)
+               (copy-alist (my-mas--pair-get :roles))
+               (list :limits (copy-alist (my-mas--pair-get :limits))
+                     :mounts `((reviewer . ,(my-mas--pair-get :mount)))
+                     :options (my-mas--model-options
+                               (my-mas--pair-get :models)))))
+
+(transient-define-prefix my-mas-pair-menu ()
+  "Implementer + reviewer run: check the settings, C-c RET starts."
+  [["Task"
+    ("-t" my-mas-pair-set-task :transient t
+     :description
+     (lambda ()
+       (format "%-12s %s" "Task"
+               (let ((task (my-mas--pair-get :task)))
+                 (if (string-empty-p (string-trim task))
+                     (propertize "(discuss it first)"
+                                 'face 'transient-inactive-value)
+                   (my-mas--pair-value (truncate-string-to-width
+                                        task 50 nil nil "…")))))))]]
+  [["Implementer (left)"
+    ("-i" my-mas-pair-set-implementer :transient t
+     :description (lambda () (my-mas--pair-describe-harness 'implementer)))
+    ("-I" my-mas-pair-set-implementer-model :transient t
+     :description (lambda () (my-mas--pair-describe-model 'implementer)))]
+   ["Reviewer (right)"
+    ("-r" my-mas-pair-set-reviewer :transient t
+     :description (lambda () (my-mas--pair-describe-harness 'reviewer)))
+    ("-R" my-mas-pair-set-reviewer-model :transient t
+     :description (lambda () (my-mas--pair-describe-model 'reviewer)))
+    ("-m" my-mas-pair-toggle-mount :transient t
+     :description
+     (lambda () (format "%-12s %s" "  mount"
+                        (my-mas--pair-value (my-mas--pair-get :mount)))))]
+   ["Review rounds"
+    ("-p" my-mas-pair-set-plan-rounds :transient t
+     :description
+     (lambda () (format "%-6s %s" "Plan"
+                        (my-mas--pair-value
+                         (number-to-string
+                          (alist-get 'plan (my-mas--pair-get :limits)))))))
+    ("-c" my-mas-pair-set-code-rounds :transient t
+     :description
+     (lambda () (format "%-6s %s" "Code"
+                        (my-mas--pair-value
+                         (number-to-string
+                          (alist-get 'code (my-mas--pair-get :limits)))))))]]
+  [["Run"
+    ("C-c RET" "Start" my-mas-pair-start)
+    ("D" "Reset to defaults" my-mas-pair-reset :transient t)]])
+
 ;;;###autoload
 (defun my-mas-status ()
   "Show the state of the current multi-agent run."
@@ -1061,18 +1558,21 @@ Interactively, ask which harness plays each role; ROLES is
     (message "MAS %s: %s, step %s, round %d/%d, %s elapsed%s"
              (my-mas-run-id run) (my-mas--state-label run)
              (my-mas-run-step run) (my-mas-run-n run)
-             my-desktop-mas-max-iterations (my-mas--elapsed run)
+             (my-mas--max run) (my-mas--elapsed run)
              (if (my-mas-run-reason run)
                  (format " -- %s" (my-mas-run-reason run))
                ""))))
 
 ;;;###autoload
 (defun my-mas-continue ()
-  "Continue the current run past a gate or a pause.
-While an agent is still working, offer to re-send its step prompt."
+  "Continue the current run past a gate, a pause or a discussion.
+A discussion with choices (the plan presentation) asks what comes
+next.  While an agent is still working, offer to re-send its step
+prompt."
   (interactive)
   (let ((run (my-mas--current-run)))
     (pcase (my-mas-run-status run)
+      ('discuss (my-mas--end-discussion run))
       ((or 'gate 'paused)
        (let ((resume (my-mas-run-pending run)))
          (setf (my-mas-run-pending run) nil
@@ -1136,7 +1636,8 @@ While an agent is still working, offer to re-send its step prompt."
   "Multi-agent runs (Claude / Codex / DSH)."
   [["Start"
     ("o" "openspec change" my-mas-openspec)
-    ("a" "architecture decision" my-mas-architecture)]
+    ("a" "architecture decision" my-mas-architecture)
+    ("i" "implementer + reviewer" my-mas-pair-menu)]
    ["Current run"
     ("s" "Status" my-mas-status)
     ("c" "Continue" my-mas-continue)

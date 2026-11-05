@@ -50,7 +50,7 @@ configurations**:
 │   ├── desktop-ai.el        # gptel assistant; per-chat folders + ai-chats.db state
 │   ├── desktop-dsh.el       # DSH web launcher + dsh-emacs client (fallback)
 │   ├── desktop-dsh-acp.el   # DSH / Claude / Codex ACP agents through agent-shell (default)
-│   ├── desktop-mas.el       # Multi-agent runs (C-c a m): openspec + architecture flows
+│   ├── desktop-mas.el       # Multi-agent runs (C-c a m): openspec, architecture, pair flows
 │   ├── desktop-podman.el    # C-c p podman helpers (container picker)
 │   ├── desktop-edit.el      # JSON/YAML/TOML/Markdown/CSV editing + apheleia
 │   ├── desktop-git-explain.el # C-c g e: gptel explainer of uncommitted changes
@@ -211,7 +211,9 @@ Always include `lexical-binding: t` at the top of every file.
     project and harness; f attach file, h history toggle, o open chat,
     r rename chat, l search, s save, g gptel-menu, z AI usage: Z-AI, DeepSeek, Claude;
     `m` nested multi-agent prefix, bound only when `desktop-mas' is
-    loaded: o openspec flow, a architecture flow, s status, c continue,
+    loaded: o openspec flow, a architecture flow, i implementer +
+    reviewer flow (transient menu of roles, models, reviewer mount and
+    rounds; C-c RET starts), s status, c continue,
     p pause, k abort, l side-by-side layout, r run folder/report, m menu);
     `C-c l` - lexicon prefix (t transform, p prompt, d download, s status,
     r remove-last), bound only when `desktop-lexicon' is loaded;
@@ -326,8 +328,10 @@ machinery code; add a `defcustom` to `desktop-config-defs.el` and read it.
   the C-c a d commands) with launcher options `--role mas-<role>
   --outbox <run dir> --label sem.mas-run=<id> --name ... --timeout ...`.
 - Steps hand off through JSON result files in
-  `<project>/.mas/<run-id>/` (ignored via `.git/info/exclude`, never a
-  tracked file). A step completes on `turn-complete` (`end_turn`) plus a
+  `<project>/.mas/<time>-<flow>/` (`my-desktop-mas-run-dir-time-format`,
+  default `2026-11-05-10:16:00`; ignored via `.git/info/exclude`, never
+  a tracked file). Container names and labels keep the colon-free run
+  id `<YYYYmmdd-HHMMSS>-<flow>`. A step completes on `turn-complete` (`end_turn`) plus a
   valid result file; one reminder, then the run pauses.
 - Only the lead escalates (`blocked` pauses the run). The openspec
   implementer may only report `done` (step key `:verdicts`); blockers
@@ -337,6 +341,18 @@ machinery code; add a `defcustom` to `desktop-config-defs.el` and read it.
 - No orphan containers: a finished or aborted run kills both agent
   buffers and `podman rm -f`s whatever still carries its label;
   `kill-emacs-hook` does the same synchronously.
+- The `pair` flow (C-c a m i): the operator discusses the task with the
+  implementer (a `:discuss` step: one prompt, chat turns are ignored,
+  C-c a m c ends it), the implementer writes `brief.md` + `plan.md` in
+  the run folder, the reviewer (overlay mount: builds and tests, writes
+  never reach the project) roasts the plan until it approves; the
+  implementer presents it and C-c a m c asks approve / re-review /
+  abort; then code + review until the reviewer approves. Steps carry
+  `:phase` (plan, code): each phase has its own round count and limit
+  (`my-desktop-mas-pair-rounds`, overridable per run in the menu).
+  `:approve-clean` critiques may approve only with no open finding,
+  minor ones included. Per-role models go to the agents as ACP config
+  options (`my-dsh-acp-start-owned :config-options`).
 - Roles are per run: C-c a m o / a ask which harness plays each role
   (defaults from `my-desktop-mas-roles'); steps, prompts and mounts
   depend on the role only, never on the harness.

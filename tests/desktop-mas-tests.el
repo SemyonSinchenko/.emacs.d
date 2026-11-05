@@ -393,7 +393,7 @@
   (my-mas-test--with-project
     (let ((run (my-mas-architecture "x" "docs/x.md")))
       (setf (my-mas-run-params run)
-            (append '(("change" . "demo") ("request" . "r"))
+            (append '(("change" . "demo") ("request" . "r") ("task" . "t"))
                     (my-mas-run-params run)))
       (dolist (flow my-mas--flows)
         (setf (my-mas-run-flow run) (car flow))
@@ -402,6 +402,225 @@
             (should (stringp (my-mas--render
                               (my-mas--template (car flow) prompt)
                               (my-mas--vars run (cdr step)))))))))))
+
+;; ------------------------------------------------------------------
+;; Implementer + reviewer (pair)
+;; ------------------------------------------------------------------
+
+(defun my-mas-test--chat (run role)
+  "Fire an operator chat turn's `turn-complete' on ROLE's agent in RUN."
+  (let ((buffer (my-mas--agent run role)))
+    (dolist (sub my-mas-test--subs)
+      (when (and (eq (nth 0 sub) buffer) (eq (nth 1 sub) 'turn-complete))
+        (with-current-buffer buffer
+          (funcall (nth 2 sub)
+                   '((:event . turn-complete)
+                     (:data (:stop-reason . "end_turn")))))))
+    (sleep-for 0.7)))
+
+(defun my-mas-test--continue (run &optional key)
+  "Run `my-mas-continue' in RUN, answering a choice prompt with KEY."
+  (cl-letf (((symbol-function 'read-multiple-choice)
+             (lambda (_prompt choices &rest _)
+               (or (assq key choices) (error "No choice %c" key)))))
+    (should (eq (my-mas--current-run) run))
+    (my-mas-continue)))
+
+(defun my-mas-test--result (verdict &rest findings)
+  "Return a result alist with VERDICT and FINDINGS."
+  `((verdict . ,verdict) (summary . "s") (findings . ,(vconcat findings))))
+
+(defun my-mas-test--pair-to-present (run)
+  "Drive pair RUN from the discussion to the plan presentation."
+  (my-mas-test--continue run)
+  (my-mas-test--answer run (my-mas-test--result "done"))
+  (my-mas-test--answer run (my-mas-test--result "approve"))
+  (should (eq (my-mas-run-status run) 'discuss))
+  (should (eq (my-mas-run-step run) 'present)))
+
+(ert-deftest my-mas-pair-happy-path ()
+  (my-mas-test--with-project
+    (let* ((run (my-mas-pair "add a cache"))
+           (reviewer (seq-find (lambda (s) (member "mas-reviewer" (nth 1 s)))
+                               my-mas-test--started))
+           (implementer (seq-find (lambda (s)
+                                    (member "mas-implementer" (nth 1 s)))
+                                  my-mas-test--started)))
+      ;; Defaults: DSH implements, Claude reviews through an overlay.
+      (should (eq (car implementer) 'dsh))
+      (should (eq (car reviewer) 'claude))
+      (should (equal (member "--mount" (nth 1 reviewer)) '("--mount" "overlay")))
+      (should-not (member "--mount" (nth 1 implementer)))
+      (should (string-match-p
+               "/\\.mas/[0-9]\\{4\\}-[0-9][0-9]-[0-9][0-9]-[0-9:]\\{8\\}-pair/\\'"
+               (my-mas-run-dir run)))
+      ;; Discussion: the prompt carries the task, chat turns are ignored.
+      (should (eq (my-mas-run-status run) 'discuss))
+      (should (string-match-p "add a cache" (cdar my-mas-test--prompts)))
+      (my-mas-test--chat run 'implementer)
+      (should (eq (my-mas-run-status run) 'discuss))
+      (should (null (my-mas-run-waiting run)))
+      ;; Plan phase.
+      (my-mas-test--continue run)
+      (should (eq (my-mas-test--step run) 'plan))
+      (my-mas-test--answer run (my-mas-test--result "done"))
+      (should (eq (my-mas-test--step run) 'plan-roast))
+      (my-mas-test--answer
+       run (my-mas-test--result "changes_requested"
+                                (my-mas-test--finding "P1")))
+      (should (eq (my-mas-test--step run) 'plan-respond))
+      (my-mas-test--answer
+       run (my-mas-test--result "done" (my-mas-test--finding "P1" "accepted")))
+      (should (eq (my-mas-test--step run) 'plan-reroast))
+      (should (= (my-mas-run-n run) 2))
+      (my-mas-test--answer
+       run (my-mas-test--result "approve" (my-mas-test--finding "P1" "resolved")))
+      ;; The operator approves the plan; the code phase counts afresh.
+      (should (eq (my-mas-run-step run) 'present))
+      (my-mas-test--continue run ?a)
+      (should (eq (my-mas-test--step run) 'implement))
+      (should (eq (my-mas-run-phase run) 'code))
+      (should (= (my-mas-run-n run) 1))
+      (my-mas-test--answer run (my-mas-test--result "done"))
+      (should (eq (my-mas-test--step run) 'review))
+      (my-mas-test--answer
+       run (my-mas-test--result "changes_requested"
+                                (my-mas-test--finding "C1")))
+      (should (eq (my-mas-test--step run) 'fix))
+      (my-mas-test--answer
+       run (my-mas-test--result "done" (my-mas-test--finding "C1" "rejected")))
+      (should (eq (my-mas-test--step run) 'rereview))
+      (should (string-match-p "fix-1.json" (cdar my-mas-test--prompts)))
+      (my-mas-test--answer
+       run (my-mas-test--result "approve" (my-mas-test--finding "C1" "conceded")))
+      (should (eq (my-mas-run-status run) 'done))
+      (let ((report (my-mas--read-file (my-mas--file run "report.org"))))
+        (should (string-match-p "plan 2 / 10, code 2 / 10" report))
+        (should (string-match-p "plan.md" report))))))
+
+(ert-deftest my-mas-pair-approve-needs-every-finding-closed ()
+  (my-mas-test--with-project
+    (let ((run (my-mas-pair "x")))
+      (my-mas-test--continue run)
+      (my-mas-test--answer run (my-mas-test--result "done"))
+      ;; A minor finding left open: the approval is sent back once.
+      (my-mas-test--answer
+       run (my-mas-test--result
+            "approve" `((id . "P1") (severity . "minor") (title . "nit")
+                        (status . "open"))))
+      (should (eq (my-mas-test--step run) 'plan-roast))
+      (should (plist-get (my-mas-run-waiting run) :reminded))
+      (should (string-match-p "leaves open findings (P1)"
+                              (cdar my-mas-test--prompts))))))
+
+(ert-deftest my-mas-pair-phase-limit ()
+  (my-mas-test--with-project
+    (let ((run (my-mas-pair "x" nil '(:limits ((plan . 1) (code . 10))))))
+      (my-mas-test--continue run)
+      (my-mas-test--answer run (my-mas-test--result "done"))
+      (my-mas-test--answer
+       run (my-mas-test--result "changes_requested"
+                                (my-mas-test--finding "P1")))
+      (my-mas-test--answer
+       run (my-mas-test--result "done" (my-mas-test--finding "P1" "accepted")))
+      (should (eq (my-mas-run-status run) 'limit))
+      (should (string-match-p "plan review rounds" (my-mas-run-reason run))))))
+
+(ert-deftest my-mas-pair-re-review-of-operator-adjustments ()
+  (my-mas-test--with-project
+    (let ((run (my-mas-pair "x" nil '(:limits ((plan . 2) (code . 10))))))
+      (my-mas-test--pair-to-present run)
+      (my-mas-test--continue run ?r)
+      (should (eq (my-mas-test--step run) 'plan-amend))
+      (should (string-match-p "plan-response-1.json"
+                              (plist-get (my-mas-run-waiting run) :output)))
+      (my-mas-test--answer
+       run (my-mas-test--result "done" (my-mas-test--finding "A1" "accepted")))
+      (should (eq (my-mas-test--step run) 'plan-reroast))
+      (should (string-match-p "plan-response-1.json" (cdar my-mas-test--prompts)))
+      (my-mas-test--answer
+       run (my-mas-test--result "approve" (my-mas-test--finding "A1" "resolved")))
+      (should (eq (my-mas-run-step run) 'present))
+      ;; Rounds used up: re-review is no longer offered.
+      (let (offered)
+        (cl-letf (((symbol-function 'read-multiple-choice)
+                   (lambda (_prompt choices &rest _)
+                     (setq offered (mapcar #'car choices))
+                     (assq ?a choices))))
+          (my-mas-continue))
+        (should (equal offered '(?a ?k))))
+      (should (eq (my-mas-test--step run) 'implement)))))
+
+(ert-deftest my-mas-pair-abort-at-the-plan ()
+  (my-mas-test--with-project
+    (let ((run (my-mas-pair "x")))
+      (my-mas-test--pair-to-present run)
+      (my-mas-test--continue run ?k)
+      (should (eq (my-mas-run-status run) 'aborted))
+      (should (null my-mas--runs)))))
+
+(ert-deftest my-mas-pair-project-edits-while-presenting-ask ()
+  (my-mas-test--with-project
+    (let ((run (my-mas-pair "x")))
+      (my-mas-test--pair-to-present run)
+      (with-temp-file (expand-file-name "early.el" root) (insert "code\n"))
+      (cl-letf (((symbol-function 'y-or-n-p) (lambda (&rest _) nil)))
+        (should-error (my-mas-test--continue run ?a) :type 'user-error))
+      (should (eq (my-mas-run-status run) 'discuss))
+      (cl-letf (((symbol-function 'y-or-n-p) (lambda (&rest _) t)))
+        (my-mas-test--continue run ?a))
+      (should (eq (my-mas-test--step run) 'implement)))))
+
+(ert-deftest my-mas-pair-plan-step-must-not-code ()
+  (my-mas-test--with-project
+    (let ((run (my-mas-pair "x")))
+      (my-mas-test--continue run)
+      (with-temp-file (expand-file-name "early.el" root) (insert "code\n"))
+      (my-mas-test--answer run (my-mas-test--result "done"))
+      (should (eq (my-mas-run-status run) 'paused))
+      (should (string-match-p "early.el" (my-mas-run-reason run))))))
+
+(ert-deftest my-mas-pair-menu-settings-start-the-run ()
+  (let ((my-mas--pair-settings nil)
+        (my-desktop-mas-pair-models nil)
+        (my-desktop-mas-pair-rounds '((plan . 10) (code . 10)))
+        (my-desktop-mas-pair-reviewer-mount "overlay")
+        started)
+    (should (equal (my-mas--pair-get :roles)
+                   '((implementer . dsh) (reviewer . claude))))
+    (my-mas--pair-put :models '((reviewer . "m1")))
+    (my-mas-pair-toggle-mount)
+    (cl-letf (((symbol-function 'completing-read)
+               (lambda (&rest _) "m2"))
+              ((symbol-function 'read-number) (lambda (&rest _) 3)))
+      (my-mas-pair-set-implementer-model)
+      (my-mas-pair-set-code-rounds))
+    ;; A new harness drops the role's model.
+    (cl-letf (((symbol-function 'completing-read) (lambda (&rest _) "Codex")))
+      (my-mas-pair-set-reviewer))
+    (cl-letf (((symbol-function 'my-mas-pair)
+               (lambda (&rest args) (setq started args))))
+      (my-mas-pair-start))
+    (should (equal (nth 1 started) '((implementer . dsh) (reviewer . codex))))
+    (should (equal (plist-get (nth 2 started) :options)
+                   '((implementer ("model" . "m2")))))
+    (should (equal (plist-get (nth 2 started) :mounts) '((reviewer . "ro"))))
+    (should (equal (plist-get (nth 2 started) :limits)
+                   '((plan . 10) (code . 3))))
+    ;; The configured defaults are untouched; D brings them back.
+    (should (equal my-desktop-mas-pair-rounds '((plan . 10) (code . 10))))
+    (my-mas-pair-reset)
+    (should (equal (my-mas--pair-get :mount) "overlay"))))
+
+(ert-deftest my-mas-acp-config-options-merge ()
+  (should (equal (my-dsh-acp--merge-options
+                  '(("model" . "a") ("effort" . "high"))
+                  '(("model" . "b")))
+                 '(("model" . "b") ("effort" . "high"))))
+  (should (equal (my-dsh-acp--merge-options '(("effort" . "high"))
+                                            '(("model" . "b")))
+                 '(("model" . "b") ("effort" . "high"))))
+  (should (equal (my-dsh-acp--merge-options nil nil) nil)))
 
 (provide 'desktop-mas-tests)
 ;;; desktop-mas-tests.el ends here
