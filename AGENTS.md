@@ -329,6 +329,11 @@ machinery code; add a `defcustom` to `desktop-config-defs.el` and read it.
   `<project>/.mas/<run-id>/` (ignored via `.git/info/exclude`, never a
   tracked file). A step completes on `turn-complete` (`end_turn`) plus a
   valid result file; one reminder, then the run pauses.
+- Only the lead escalates (`blocked` pauses the run). The openspec
+  implementer may only report `done` (step key `:verdicts`); blockers
+  are open findings that the lead's review decides, and it may amend
+  `openspec/changes/<change>/` during review (`:may-edit`, exempt from
+  the `:tamper` check).
 - No orphan containers: a finished or aborted run kills both agent
   buffers and `podman rm -f`s whatever still carries its label;
   `kill-emacs-hook` does the same synchronously.

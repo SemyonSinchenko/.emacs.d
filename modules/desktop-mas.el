@@ -12,7 +12,11 @@
 ;;   openspec      lead (Claude) drafts the change, impl (DSH) applies
 ;;                 it, lead verifies and reviews, impl fixes, ... until
 ;;                 lead approves; then lead archives.  Nothing is
-;;                 committed: commits stay the operator's job.
+;;                 committed: commits stay the operator's job.  impl
+;;                 never blocks: it reports blockers as open findings,
+;;                 and the lead's review decides them (it may amend the
+;;                 change's artifacts); only the lead escalates to the
+;;                 operator with `blocked'.
 ;;   architecture  architect (Claude) writes a design, critic (DSH)
 ;;                 roasts it against the current worktree (read-only
 ;;                 mount), architect fixes or pushes back, ... until the
@@ -72,13 +76,14 @@
             :capture (change) :next gate-plan)
       (gate-plan :gate after-plan :next apply)
       (apply :role impl :prompt "apply" :output "impl-{{n}}.json"
-             :next review)
+             :verdicts ("done") :next review)
       (review :role lead :prompt "review" :critique t :tamper t
+              :may-edit "openspec/changes/{{change}}"
               :input "impl-{{n}}.json" :output "review-{{n}}.json"
               :on ((approve . gate-archive) (changes_requested . fix)))
       (fix :role impl :prompt "fix" :bump t :answers t
            :input "review-{{prev_n}}.json" :output "impl-{{n}}.json"
-           :next review)
+           :verdicts ("done") :next review)
       (gate-archive :gate before-archive :next archive)
       (archive :role lead :prompt "archive" :output "archive.json"
                :next report)
@@ -112,9 +117,13 @@ the first step, :steps the steps as (STEP . PLIST):
   :critique the step judges work: verdict approve, changes_requested
             or blocked, and :on maps the verdict to the next step;
             other steps report done or blocked and go to :next
+  :verdicts the verdicts the step may report, when narrower than the
+            above (the openspec implementer never blocks: it reports
+            blockers as open findings and the lead's review answers)
   :bump     entering the step starts the next iteration (limit check)
   :answers  the output must answer every open finding of :input
   :tamper   the agent must not change the project worktree
+  :may-edit a path (template) exempt from the :tamper check
   :capture  result fields stored as template variables
   :gate     wait for `my-mas-continue' when the gate is in
             `my-desktop-mas-gates'
@@ -371,9 +380,9 @@ containers with separate --role state)."
   "Return a problem description for result DATA of step DEF, or nil."
   (let* ((findings (alist-get 'findings data))
          (verdict (alist-get 'verdict data))
-         (allowed (if (plist-get def :critique)
-                      my-mas--critique-verdicts
-                    my-mas--work-verdicts)))
+         (allowed (cond ((plist-get def :verdicts))
+                        ((plist-get def :critique) my-mas--critique-verdicts)
+                        (t my-mas--work-verdicts))))
     (cond
      ((not (and (consp data) (consp (car data)) (symbolp (caar data))))
       "the result file must contain one JSON object")
@@ -451,13 +460,19 @@ containers with separate --role state)."
       (when (eq 0 (apply #'call-process "git" nil t nil args))
         (buffer-string)))))
 
-(defun my-mas--worktree-snapshot (root)
-  "Return a snapshot of ROOT's worktree state, or nil outside git."
+(defun my-mas--tamper-excludes (def vars)
+  "Return the extra pathspecs step DEF may edit (its :may-edit), or nil."
+  (when-let* ((path (plist-get def :may-edit)))
+    (list (concat ":(exclude)" (my-mas--render path vars)))))
+
+(defun my-mas--worktree-snapshot (root &optional excludes)
+  "Return a snapshot of ROOT's worktree state, or nil outside git.
+EXCLUDES are extra pathspecs to ignore."
   (when-let* (((file-exists-p (expand-file-name ".git" root)))
+              (excludes (append my-mas--worktree-excludes excludes))
               (status (apply #'my-mas--git root "status" "--porcelain=v1"
-                             "-uall" "--" "." my-mas--worktree-excludes))
-              (diff (apply #'my-mas--git root "diff" "--" "."
-                           my-mas--worktree-excludes)))
+                             "-uall" "--" "." excludes))
+              (diff (apply #'my-mas--git root "diff" "--" "." excludes)))
     (list :status (split-string status "\n" t)
           :hash (secure-hash 'sha1 diff))))
 
@@ -743,7 +758,8 @@ C-c a m c" (my-mas-run-id run) (plist-get def :gate)))
           (delete-file output))
         (when (plist-get def :tamper)
           (setf (my-mas-run-snapshot run)
-                (my-mas--worktree-snapshot (my-mas-run-root run)))))
+                (my-mas--worktree-snapshot
+                 (my-mas-run-root run) (my-mas--tamper-excludes def vars)))))
       (setf (my-mas-run-status run) 'running
             (my-mas-run-waiting run)
             (list :step step :role role :output output
@@ -827,7 +843,9 @@ Do not redo the work itself."
                               (my-mas--worktree-changes
                                (my-mas-run-snapshot run)
                                (my-mas--worktree-snapshot
-                                (my-mas-run-root run))))))
+                                (my-mas-run-root run)
+                                (my-mas--tamper-excludes
+                                 def (my-mas--vars run def)))))))
             (if changes
                 (my-mas--pause
                  run (format "%s changed project files during %s: %s \

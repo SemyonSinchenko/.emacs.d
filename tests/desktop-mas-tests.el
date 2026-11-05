@@ -286,6 +286,36 @@
       (my-mas-continue)
       (should (equal (my-mas-test--step run) 'archive)))))
 
+(ert-deftest my-mas-implementer-blockers-go-to-the-lead ()
+  (my-mas-test--with-project
+    (let ((run (my-mas-openspec "demo")))
+      (my-mas-test--answer run '((verdict . "done") (summary . "p")
+                                 (change . "demo") (findings . [])))
+      (should (equal (my-mas-test--step run) 'apply))
+      ;; The implementer may not block: one reminder, same step.
+      (my-mas-test--answer run `((verdict . "blocked") (summary . "stuck")
+                                 (findings . ,(vector (my-mas-test--finding
+                                                       "F1")))))
+      (should (eq (my-mas-run-status run) 'running))
+      (should (equal (my-mas-test--step run) 'apply))
+      (should (string-match-p "\"verdict\" must be one of done"
+                              (cdar my-mas-test--prompts)))
+      ;; The blocker reported as a finding reaches the lead's review.
+      (my-mas-test--answer run `((verdict . "done") (summary . "stuck")
+                                 (findings . ,(vector (my-mas-test--finding
+                                                       "F1")))))
+      (should (equal (my-mas-test--step run) 'review))
+      ;; The lead amends the change's design: not a tamper pause.
+      (let ((design (expand-file-name "openspec/changes/demo/design.md"
+                                      root)))
+        (make-directory (file-name-directory design) t)
+        (with-temp-file design (insert "decided\n")))
+      (my-mas-test--answer
+       run `((verdict . "changes_requested") (summary . "decided F1")
+             (findings . ,(vector (my-mas-test--finding "F1")))))
+      (should (eq (my-mas-run-status run) 'running))
+      (should (equal (my-mas-test--step run) 'fix)))))
+
 (ert-deftest my-mas-non-end-turn-pauses-and-retries ()
   (my-mas-test--with-project
     (let ((run (my-mas-openspec "demo")))
