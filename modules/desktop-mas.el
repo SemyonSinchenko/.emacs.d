@@ -1187,7 +1187,7 @@ and :options (ROLE . ACP-CONFIG-OPTIONS)."
          (roles (my-mas--check-roles
                  flow (or roles (my-mas--flow-roles flow))))
          (now (current-time))
-         ;; Container names and labels take no colons; the folder name
+         ;; The run id names containers and labels; the folder name
          ;; follows `my-desktop-mas-run-dir-time-format'.
          (id (format "%s-%s" (format-time-string "%Y%m%d-%H%M%S" now) flow))
          (run (my-mas--make-run

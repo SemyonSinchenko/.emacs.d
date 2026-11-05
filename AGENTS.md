@@ -329,10 +329,11 @@ machinery code; add a `defcustom` to `desktop-config-defs.el` and read it.
   --outbox <run dir> --label sem.mas-run=<id> --name ... --timeout ...`.
 - Steps hand off through JSON result files in
   `<project>/.mas/<time>-<flow>/` (`my-desktop-mas-run-dir-time-format`,
-  default `2026-11-05-10:16:00`; ignored via `.git/info/exclude`, never
-  a tracked file). Container names and labels keep the colon-free run
-  id `<YYYYmmdd-HHMMSS>-<flow>`. A step completes on `turn-complete` (`end_turn`) plus a
-  valid result file; one reminder, then the run pauses.
+  default `2026-11-05-10-16-00`; ignored via `.git/info/exclude`, never
+  a tracked file). Container names and labels use the run id
+  `<YYYYmmdd-HHMMSS>-<flow>`. A step completes on `turn-complete`
+  (`end_turn`) plus a valid result file; one reminder, then the run
+  pauses.
 - Only the lead escalates (`blocked` pauses the run). The openspec
   implementer may only report `done` (step key `:verdicts`); blockers
   are open findings that the lead's review decides, and it may amend

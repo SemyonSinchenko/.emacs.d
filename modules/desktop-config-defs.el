@@ -936,7 +936,7 @@ or `dsh'."
   :type 'directory
   :group 'my-desktop)
 
-(defcustom my-desktop-mas-run-dir-time-format "%Y-%m-%d-%H:%M:%S"
+(defcustom my-desktop-mas-run-dir-time-format "%Y-%m-%d-%H-%M-%S"
   "`format-time-string' format of a run folder name.
 A run's folder is <project>/.mas/<time>-<flow>/."
   :type 'string

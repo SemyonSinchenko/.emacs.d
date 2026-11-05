@@ -452,7 +452,7 @@
       (should (equal (member "--mount" (nth 1 reviewer)) '("--mount" "overlay")))
       (should-not (member "--mount" (nth 1 implementer)))
       (should (string-match-p
-               "/\\.mas/[0-9]\\{4\\}-[0-9][0-9]-[0-9][0-9]-[0-9:]\\{8\\}-pair/\\'"
+               "/\\.mas/[0-9]\\{4\\}-[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-pair/\\'"
                (my-mas-run-dir run)))
       ;; Discussion: the prompt carries the task, chat turns are ignored.
       (should (eq (my-mas-run-status run) 'discuss))

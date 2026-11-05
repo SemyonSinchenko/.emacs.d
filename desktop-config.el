@@ -328,7 +328,7 @@
 ;; (setq my-desktop-mas-model-choices
 ;;       '((dsh "[\"deepseek-official\",\"deepseek-flash\"]")))
 ;; Run folder name: .mas/<time>-<flow>/, time in this format:
-;; (setq my-desktop-mas-run-dir-time-format "%Y-%m-%d-%H:%M:%S")
+;; (setq my-desktop-mas-run-dir-time-format "%Y-%m-%d-%H-%M-%S")
 ;; Container lifetime backstop (seconds) and the still-working notice:
 ;; (setq my-desktop-mas-run-timeout (* 6 60 60))
 ;; (setq my-desktop-mas-turn-idle-timeout (* 15 60))
