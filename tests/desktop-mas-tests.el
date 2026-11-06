@@ -39,7 +39,10 @@
 
 (defvar my-mas-test--subs nil "Recorded (BUFFER EVENT FN) subscriptions.")
 (defvar my-mas-test--prompts nil "Recorded (BUFFER . TEXT) prompts, newest first.")
-(defvar my-mas-test--started nil "Recorded (HARNESS EXTRA-ARGS BUFFER).")
+(defvar my-mas-test--started nil
+  "Recorded (HARNESS EXTRA-ARGS BUFFER TRANSCRIPT), newest first.")
+(defvar my-mas-test--no-code nil
+  "Non-nil: implementer turns of `my-mas-test--answer' change no code.")
 
 (defun my-mas-test--git (dir &rest args)
   "Run git ARGS in DIR."
@@ -55,6 +58,9 @@
           (my-mas-test--subs nil)
           (my-mas-test--prompts nil)
           (my-mas-test--started nil)
+          (my-mas-test--no-code nil)
+          (my-desktop-mas-fresh-sessions t)
+          (my-desktop-mas-no-progress-limit 2)
           (my-desktop-mas-prompts-dir
            (expand-file-name "../mas-prompts"
                              (file-name-directory
@@ -77,9 +83,10 @@
                ((symbol-function 'display-buffer) #'ignore)
                ((symbol-function 'my-dsh-acp-start-owned)
                 (cl-function
-                 (lambda (&key harness extra-args buffer-name &allow-other-keys)
+                 (lambda (&key harness extra-args buffer-name transcript
+                               &allow-other-keys)
                    (let ((buffer (generate-new-buffer buffer-name)))
-                     (push (list harness extra-args buffer)
+                     (push (list harness extra-args buffer transcript)
                            my-mas-test--started)
                      buffer))))
                ((symbol-function 'agent-shell-subscribe-to)
@@ -110,9 +117,17 @@
                    (list (cons :event event) (cons :data data))))))))
 
 (defun my-mas-test--answer (run result)
-  "Let the waiting agent of RUN write RESULT (an alist) and end its turn."
+  "Let the waiting agent of RUN write RESULT (an alist) and end its turn.
+An implementer step measured for progress also writes code (an
+untracked file), unless `my-mas-test--no-code'."
   (let ((waiting (my-mas-run-waiting run)))
     (should waiting)
+    (when (and (plist-get (my-mas--step-def run (plist-get waiting :step))
+                          :progress)
+               (not my-mas-test--no-code))
+      (write-region "work\n" nil
+                    (expand-file-name "work.txt" (my-mas-run-root run))
+                    t 'silent))
     (when result
       (with-temp-file (plist-get waiting :output)
         (insert (json-serialize result))))
@@ -341,6 +356,134 @@
       (should (eq (my-mas-run-status run) 'aborted))
       (should-not (buffer-live-p lead))
       (should (null my-mas--runs)))))
+
+(defun my-mas-test--openspec-to-review (run)
+  "Drive openspec RUN through the plan and the apply step."
+  (my-mas-test--answer run '((verdict . "done") (summary . "p")
+                             (change . "demo") (findings . [])))
+  (my-mas-test--answer run '((verdict . "partial") (summary . "a")
+                             (findings . [])))
+  (should (equal (my-mas-test--step run) 'review)))
+
+(ert-deftest my-mas-fix-round-starts-a-fresh-implementer ()
+  (my-mas-test--with-project
+    (let* ((run (my-mas-openspec "demo"))
+           (id (my-mas-run-id run))
+           (first (my-mas--agent run 'impl)))
+      ;; Every agent writes its own transcript.
+      (should (equal (sort (mapcar (lambda (s) (nth 3 s)) my-mas-test--started)
+                           #'string<)
+                     (list (format "%s-impl.md" id) (format "%s-lead.md" id))))
+      (my-mas-test--openspec-to-review run)
+      (my-mas-test--answer
+       run `((verdict . "changes_requested") (summary . "r")
+             (findings . ,(vector (my-mas-test--finding "R1-1")))))
+      (should (equal (my-mas-test--step run) 'fix))
+      (let ((second (my-mas--agent run 'impl))
+            (start (car my-mas-test--started)))
+        (should-not (eq first second))
+        (should-not (buffer-live-p first))
+        (should (eq (nth 2 start) second))
+        (should (member (format "mas-%s-impl-2" id) (nth 1 start)))
+        (should (equal (nth 3 start) (format "%s-impl-2.md" id)))
+        ;; The lead keeps its session.
+        (should (= (length my-mas-test--started) 3))
+        ;; The prompt goes to the new session and hands the round over.
+        (should (eq (caar my-mas-test--prompts) second))
+        (should (string-match-p "new session" (cdar my-mas-test--prompts)))
+        (should (string-match-p "impl-1\\.json" (cdar my-mas-test--prompts)))
+        ;; The old buffer's clean-up does not end the run.
+        (dolist (sub my-mas-test--subs)
+          (when (and (eq (nth 0 sub) first) (eq (nth 1 sub) 'clean-up))
+            (funcall (nth 2 sub) '((:event . clean-up)))))
+        (sleep-for 0.1)
+        (should (eq (my-mas-run-status run) 'running))
+        (my-mas-test--answer
+         run `((verdict . "done") (summary . "f")
+               (findings . ,(vector (my-mas-test--finding "R1-1" "fixed")))))
+        (should (equal (my-mas-test--step run) 'review))
+        (should (eq (my-mas--agent run 'impl) second))))))
+
+(ert-deftest my-mas-turn-without-progress-retries-fresh-then-pauses ()
+  (my-mas-test--with-project
+    (let ((run (my-mas-openspec "demo"))
+          (tasks (expand-file-name "openspec/changes/demo/tasks.md" root))
+          (nothing '((verdict . "partial") (summary . "nothing")
+                     (findings . []))))
+      ;; The lead writes the task list while planning.
+      (make-directory (file-name-directory tasks) t)
+      (with-temp-file tasks (insert "- [ ] 1.1 parser\n- [ ] 1.2 binder\n"))
+      (my-mas-test--answer run '((verdict . "done") (summary . "p")
+                                 (change . "demo") (findings . [])))
+      (should (string-match-p "0 of 2 tasks checked.*\n- 1\\.1 parser"
+                              (cdar my-mas-test--prompts)))
+      (let ((my-mas-test--no-code t)
+            (first (my-mas--agent run 'impl)))
+        (my-mas-test--answer run nothing)
+        ;; No review: the same step again, in a fresh session.
+        (should (eq (my-mas-run-status run) 'running))
+        (should (equal (my-mas-test--step run) 'apply))
+        (should-not (eq first (my-mas--agent run 'impl)))
+        (should (equal (plist-get (car (my-mas-run-history run)) :verdict)
+                       "partial (no progress)"))
+        (my-mas-test--answer run nothing)
+        (should (eq (my-mas-run-status run) 'paused))
+        (should (string-match-p "no progress 2 turns"
+                                (my-mas-run-reason run)))
+        ;; C-c a m c offers a fresh session.
+        (let ((second (my-mas--agent run 'impl)))
+          (my-mas-test--continue run ?f)
+          (should-not (eq second (my-mas--agent run 'impl)))
+          (should (eq (my-mas-run-status run) 'running))
+          (should (equal (my-mas-test--step run) 'apply)))
+        ;; A checked task is progress, also without code.
+        (with-temp-file tasks (insert "- [x] 1.1 parser\n- [ ] 1.2 binder\n"))
+        (my-mas-test--answer run nothing))
+      (should (equal (my-mas-test--step run) 'review))
+      (should (= (my-mas-run-idle run) 0))
+      (should (string-match-p "1 of 2 checked (\\+1 in the last turn)"
+                              (cdar my-mas-test--prompts)))
+      (should (string-match-p "code outside the change folder: UNCHANGED"
+                              (cdar my-mas-test--prompts))))))
+
+(ert-deftest my-mas-blocker-without-code-goes-to-the-lead ()
+  (my-mas-test--with-project
+    (let ((run (my-mas-openspec "demo"))
+          (my-mas-test--no-code t))
+      (my-mas-test--answer run '((verdict . "done") (summary . "p")
+                                 (change . "demo") (findings . [])))
+      (my-mas-test--answer
+       run `((verdict . "partial") (summary . "needs a decision")
+             (findings . [((id . "I1-1") (severity . "blocking")
+                           (title . "contract") (status . "open"))])))
+      (should (eq (my-mas-run-status run) 'running))
+      (should (equal (my-mas-test--step run) 'review)))))
+
+(ert-deftest my-mas-blocked-pause-offers-a-fresh-session ()
+  (my-mas-test--with-project
+    (let ((run (my-mas-openspec "demo")))
+      (my-mas-test--openspec-to-review run)
+      (my-mas-test--answer run '((verdict . "blocked") (summary . "operator?")
+                                 (findings . [])))
+      (should (eq (my-mas-run-status run) 'paused))
+      (should (eq (my-mas-run-pause-role run) 'lead))
+      (let ((lead (my-mas--agent run 'lead)))
+        (my-mas-test--continue run ?f)
+        (should-not (buffer-live-p lead))
+        (should (eq (my-mas-run-status run) 'running))
+        (should (equal (my-mas-test--step run) 'review))
+        (should (eq (caar my-mas-test--prompts) (my-mas--agent run 'lead)))
+        (should (member (format "mas-%s-lead-2" (my-mas-run-id run))
+                        (nth 1 (car my-mas-test--started))))))))
+
+(ert-deftest my-mas-untracked-edits-change-the-snapshot ()
+  (my-mas-test--with-project
+    (let ((file (expand-file-name "new.txt" root)))
+      (with-temp-file file (insert "a\n"))
+      (let ((before (my-mas--worktree-snapshot root)))
+        (write-region "more\n" nil file t 'silent)
+        (should (my-mas--worktree-changes
+                 before (my-mas--worktree-snapshot root)))))))
 
 (ert-deftest my-mas-roles-are-chosen-per-run ()
   (my-mas-test--with-project

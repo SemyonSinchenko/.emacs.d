@@ -899,6 +899,25 @@ the previous critique's.  Set to nil to disable the check."
   :type '(choice (const :tag "Off" nil) integer)
   :group 'my-desktop)
 
+(defcustom my-desktop-mas-fresh-sessions t
+  "Start every implementer fix round in a new agent session.
+A fix round of the openspec flow then begins with no memory of the
+earlier rounds: the new agent (in a new container) reads the change,
+the review and the uncommitted work from the project and the run
+folder.  When nil, the implementer keeps one session for the run."
+  :type 'boolean
+  :group 'my-desktop)
+
+(defcustom my-desktop-mas-no-progress-limit 2
+  "Implementer turns in a row without progress before a run pauses.
+A turn makes no progress when it checks no new task in tasks.md,
+changes no code and reports no blocking finding.  Such a turn skips
+the review: the step is retried in a fresh session until this many
+turns in a row made no progress, then the run pauses.  Set to nil to
+disable the check."
+  :type '(choice (const :tag "Off" nil) integer)
+  :group 'my-desktop)
+
 (defcustom my-desktop-mas-run-timeout (* 6 60 60)
   "Seconds a multi-agent container may live (podman --timeout).
 A backstop: even containers left behind by an Emacs crash are

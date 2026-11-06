@@ -339,6 +339,17 @@ machinery code; add a `defcustom` to `desktop-config-defs.el` and read it.
   are open findings that the lead's review decides, and it may amend
   `openspec/changes/<change>/` during review (`:may-edit`, exempt from
   the `:tamper` check).
+- openspec fix rounds start the implementer in a fresh session and
+  container (step key `:fresh`, `my-desktop-mas-fresh-sessions`;
+  `my-mas--restart-agent`, names `mas-<id>-<role>-<gen>`, the old
+  container is removed by name, never by the run label). Implementer
+  steps are measured (`:progress`: checked tasks of the flow's `:tasks`
+  file, code changes): a turn without progress or a blocking finding
+  skips the review and is retried fresh, then the run pauses
+  (`my-desktop-mas-no-progress-limit`). The prompts get `{{tasks}}` and
+  `{{progress}}`. A pause after `blocked` or no progress offers a fresh
+  session on C-c a m c. Each agent writes its own transcript,
+  `.agent-shell/transcripts/<id>-<role>[-<gen>].md`.
 - No orphan containers: a finished or aborted run kills both agent
   buffers and `podman rm -f`s whatever still carries its label;
   `kill-emacs-hook` does the same synchronously.

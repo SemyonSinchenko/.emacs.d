@@ -63,6 +63,7 @@
 
 (declare-function agent-shell-start "agent-shell" t)
 (declare-function agent-shell--start "agent-shell" t)
+(declare-function agent-shell--dot-subdir "agent-shell" t)
 (declare-function agent-shell-restart "agent-shell" t)
 (declare-function agent-shell-session-id "agent-shell" t)
 (declare-function agent-shell-project-buffers "agent-shell" (&optional cwd))
@@ -87,6 +88,7 @@
 ;; Mark the agent-shell options special before the first `let'-binding:
 ;; agent-shell itself is deferred, so its `defcustom' has not run yet.
 (defvar agent-shell-session-strategy)
+(defvar agent-shell-transcript-file-path-function)
 (defvar agent-shell-command-prefix)
 
 (defun my-dsh-acp--require-agent-shell ()
@@ -354,14 +356,17 @@ install it from sem-dev-container"
 
 ;;;###autoload
 (cl-defun my-dsh-acp-start-owned (&key root harness owner extra-args
-                                       buffer-name config-options)
+                                       buffer-name config-options
+                                       transcript)
   "Start a HARNESS agent-shell for ROOT in the background; return it.
 The shell is marked as owned by OWNER (see `my-dsh-acp-owner'), so
 the C-c a d commands ignore it.  EXTRA-ARGS are launcher options,
 BUFFER-NAME the agent-shell buffer name and CONFIG-OPTIONS ACP config
-options over the harness defaults, as (OPTION . VALUE).  Always a new
-session; the buffer is not displayed (the owner lays out its
-windows)."
+options over the harness defaults, as (OPTION . VALUE).  TRANSCRIPT
+is the transcript file name in the project's transcript folder
+\(default: agent-shell's start time, which two shells started in the
+same second would share).  Always a new session; the buffer is not
+displayed (the owner lays out its windows)."
   (unless owner
     (error "my-dsh-acp-start-owned: OWNER is required"))
   (let ((command (my-dsh-acp--harness-command harness))
@@ -375,6 +380,12 @@ install it from sem-dev-container"
   (my-dsh-acp--require-agent-shell)
   (let* ((default-directory root)
          (agent-shell-session-strategy 'new)
+         (agent-shell-transcript-file-path-function
+          (if transcript
+              (lambda ()
+                (expand-file-name transcript
+                                  (agent-shell--dot-subdir "transcripts")))
+            agent-shell-transcript-file-path-function))
          (buffer (agent-shell--start
                   :config (my-dsh-acp--agent-config harness extra-args
                                                     buffer-name config-options)

@@ -16,7 +16,11 @@
 ;;                 never blocks: it reports blockers as open findings,
 ;;                 and the lead's review decides them (it may amend the
 ;;                 change's artifacts); only the lead escalates to the
-;;                 operator with `blocked'.
+;;                 operator with `blocked'.  Every fix round starts the
+;;                 implementer in a fresh session (and container), so
+;;                 its context never piles up over the rounds; the
+;;                 prompt hands over through the repo, the change and
+;;                 the run folder.
 ;;   architecture  architect (Claude) writes a design, critic (DSH)
 ;;                 roasts it against the current worktree (read-only
 ;;                 mount), architect fixes or pushes back, ... until the
@@ -57,11 +61,17 @@
 ;; limits in the pair flow), a stall
 ;; check (`my-desktop-mas-stall-rounds'), gates
 ;; (`my-desktop-mas-gates'), and in the openspec flow a worktree check
-;; that the reviewer did not edit project files.
+;; that the reviewer did not edit project files, and a progress check
+;; of the implementer: a turn that checks no task in tasks.md and
+;; changes no code skips the review and is retried in a fresh session,
+;; then the run pauses (`my-desktop-mas-no-progress-limit').  A pause
+;; after `blocked' or without progress offers a fresh session of the
+;; agent (C-c a m c).
 ;;
 ;; Containers: every agent is started with --role mas-<role>,
-;; --label sem.mas-run=<id>, --name mas-<id>-<role> and --timeout
-;; `my-desktop-mas-run-timeout'.  When a run ends (or an agent buffer
+;; --label sem.mas-run=<id>, --name mas-<id>-<role>[-<session>] and
+;; --timeout `my-desktop-mas-run-timeout'.  Each agent writes its own
+;; transcript, .agent-shell/transcripts/<id>-<role>[-<session>].md.  When a run ends (or an agent buffer
 ;; is killed) both agent buffers are killed and any container still
 ;; labelled with the run is removed with `podman rm -f'; on a normal
 ;; Emacs exit `kill-emacs-hook' removes them synchronously.  Only an
@@ -89,20 +99,21 @@
   '((openspec
      :title "openspec change"
      :mounts ((lead . "rw") (impl . "rw"))
+     :tasks "openspec/changes/{{change}}/tasks.md"
      :start plan
      :steps
      ((plan :role lead :prompt "plan" :output "plan.json"
             :capture (change) :next gate-plan)
       (gate-plan :gate after-plan :next apply)
       (apply :role impl :prompt "apply" :output "impl-{{n}}.json"
-             :verdicts ("done") :next review)
+             :verdicts ("done" "partial") :progress t :next review)
       (review :role lead :prompt "review" :critique t :tamper t
               :may-edit "openspec/changes/{{change}}"
               :input "impl-{{n}}.json" :output "review-{{n}}.json"
               :on ((approve . gate-archive) (changes_requested . fix)))
-      (fix :role impl :prompt "fix" :bump t :answers t
+      (fix :role impl :prompt "fix" :bump t :answers t :fresh t
            :input "review-{{prev_n}}.json" :output "impl-{{n}}.json"
-           :verdicts ("done") :next review)
+           :verdicts ("done" "partial") :progress t :next review)
       (gate-archive :gate before-archive :next archive)
       (archive :role lead :prompt "archive" :output "archive.json"
                :next report)
@@ -172,8 +183,10 @@
                 :on ((approve . report) (changes_requested . fix)))
       (report :report t))))
   "Multi-agent flows, as (FLOW . PLIST).
-:mounts gives each role's project mount (rw, ro or overlay), :start
-the first step, :steps the steps as (STEP . PLIST):
+:mounts gives each role's project mount (rw, ro or overlay), :tasks
+the checkbox task list of the work (template, relative to the
+project; the {{tasks}} and {{progress}} placeholders), :start the
+first step, :steps the steps as (STEP . PLIST):
 
   :role     role that runs the step (harness from `my-desktop-mas-roles')
   :prompt   template mas-prompts/<flow>/<prompt>.md
@@ -182,9 +195,14 @@ the first step, :steps the steps as (STEP . PLIST):
   :critique the step judges work: verdict approve, changes_requested
             or blocked, and :on maps the verdict to the next step;
             other steps report done or blocked and go to :next
-  :verdicts the verdicts the step may report, when narrower than the
-            above (the openspec implementer never blocks: it reports
+  :verdicts the verdicts the step may report, instead of the above
+            (the openspec implementer never blocks: it reports
             blockers as open findings and the lead's review answers)
+  :progress measure the turn against the flow's :tasks and the
+            worktree; a turn without progress is retried in a fresh
+            session (see `my-desktop-mas-no-progress-limit')
+  :fresh    the step starts its agent in a new session (and container)
+            when `my-desktop-mas-fresh-sessions' is non-nil
   :bump     entering the step starts the next iteration (limit check)
   :answers  the output must answer every open finding of :input
   :tamper   the agent must not change the project worktree
@@ -267,7 +285,15 @@ containers with separate --role state)."
   id flow roles root dir params status step (n 1) reason pending
   agents waiting history last-critique open-prev (stall 0)
   snapshot pause-requested started idle-timer stopping
-  phase limits mounts options)
+  phase limits mounts options
+  ;; Fresh sessions: (ROLE . GENERATION), 1 for the first agent.
+  generations
+  ;; Progress of the implementer: the state before its turn, the
+  ;; measured text, turns in a row without progress.
+  baseline progress (idle 0)
+  ;; The role a pause may restart in a fresh session (see
+  ;; `my-mas-continue'), or nil.
+  pause-role)
 
 (defvar my-mas--runs nil
   "Runs whose agents are still alive (one per project).")
@@ -415,6 +441,43 @@ use `my-desktop-mas-max-iterations'."
       (user-error "MAS: missing prompt template %s" file))
     (my-mas--read-file file)))
 
+(defun my-mas--tasks-file (run)
+  "Return the absolute path of RUN's task list (flow :tasks), or nil.
+Nil also while a placeholder of it (such as {{change}}) is unknown."
+  (when-let* ((tasks (plist-get (my-mas--flow (my-mas-run-flow run)) :tasks))
+              (file (ignore-errors
+                      (my-mas--render tasks (my-mas-run-params run)))))
+    (expand-file-name file (my-mas-run-root run))))
+
+(defun my-mas--tasks (file)
+  "Return the checkbox tasks of FILE as (CHECKED . UNCHECKED), or nil.
+CHECKED is a count, UNCHECKED the text of the unchecked task lines."
+  (when (and file (file-readable-p file))
+    (let ((checked 0) unchecked)
+      (dolist (line (split-string (my-mas--read-file file) "\n"))
+        (cond
+         ((string-match-p "\\`[ \t]*[-*] \\[[xX]\\]" line)
+          (cl-incf checked))
+         ((string-match "\\`[ \t]*[-*] \\[ \\][ \t]*\\(.*\\)" line)
+          (push (match-string 1 line) unchecked))))
+      (cons checked (nreverse unchecked)))))
+
+(defun my-mas--tasks-text (run)
+  "Describe the state of RUN's task list for a prompt."
+  (if-let* ((tasks (my-mas--tasks (my-mas--tasks-file run))))
+      (let ((unchecked (cdr tasks)))
+        (concat
+         (format "%d of %d tasks checked in tasks.md" (car tasks)
+                 (+ (car tasks) (length unchecked)))
+         (if unchecked
+             (concat "; unchecked, in file order:\n"
+                     (mapconcat (lambda (line)
+                                  (concat "- " (truncate-string-to-width
+                                                line 100 nil nil "…")))
+                                unchecked "\n"))
+           "; none unchecked.")))
+    "(no task list yet)"))
+
 (defun my-mas--vars (run def)
   "Return the template variables of step DEF in RUN."
   (let* ((n (my-mas-run-n run))
@@ -425,7 +488,10 @@ use `my-desktop-mas-max-iterations'."
                   ("flow" . ,(symbol-name (my-mas-run-flow run)))
                   ("n" . ,(number-to-string n))
                   ("prev_n" . ,(number-to-string (1- n)))
-                  ("max" . ,(number-to-string (my-mas--max run))))
+                  ("max" . ,(number-to-string (my-mas--max run)))
+                  ("tasks" . ,(my-mas--tasks-text run))
+                  ("progress" . ,(or (my-mas-run-progress run)
+                                     "(not measured yet)")))
                 (my-mas-run-params run)))
          (output (when-let* ((output (plist-get def :output)))
                    (my-mas--render output vars)))
@@ -575,8 +641,23 @@ EXCLUDES are extra pathspecs to ignore."
               (status (apply #'my-mas--git root "status" "--porcelain=v1"
                              "-uall" "--" "." excludes))
               (diff (apply #'my-mas--git root "diff" "--" "." excludes)))
-    (list :status (split-string status "\n" t)
-          :hash (secure-hash 'sha1 diff))))
+    (let ((lines (split-string status "\n" t)))
+      (list :status lines
+            :hash (secure-hash 'sha1 diff)
+            ;; git diff misses edits of untracked files: compare their
+            ;; modification time and size.
+            :untracked
+            (delq nil
+                  (mapcar
+                   (lambda (line)
+                     (when (string-prefix-p "?? " line)
+                       (let* ((file (substring line 3))
+                              (attrs (file-attributes
+                                      (expand-file-name file root))))
+                         (list file
+                               (file-attribute-modification-time attrs)
+                               (file-attribute-size attrs)))))
+                   lines))))))
 
 (defun my-mas--worktree-changes (before after)
   "Describe the worktree changes between snapshots BEFORE and AFTER."
@@ -584,12 +665,14 @@ EXCLUDES are extra pathspecs to ignore."
              (not (and (equal (plist-get before :status)
                               (plist-get after :status))
                        (equal (plist-get before :hash)
-                              (plist-get after :hash)))))
+                              (plist-get after :hash))
+                       (equal (plist-get before :untracked)
+                              (plist-get after :untracked)))))
     (let ((new (seq-difference (plist-get after :status)
                                (plist-get before :status))))
       (if new
           (string-join (seq-take new 10) "; ")
-        "the content of already modified files"))))
+        "the content of already modified or untracked files"))))
 
 (defun my-mas--git-exclude (root)
   "Ignore .mas/ in ROOT through .git/info/exclude (never a tracked file)."
@@ -611,6 +694,21 @@ EXCLUDES are extra pathspecs to ignore."
   "Return the podman executable or nil."
   (executable-find my-desktop-podman-command))
 
+(defun my-mas--agent-name (run role)
+  "Return the name of ROLE's current agent in RUN: mas-<id>-<role>[-<gen>].
+It names the container and the transcript; a fresh session (a new
+generation) gets a new name, as the old container may still exit."
+  (let ((gen (alist-get role (my-mas-run-generations run) 1)))
+    (format "mas-%s-%s%s" (my-mas-run-id run) role
+            (if (> gen 1) (format "-%d" gen) ""))))
+
+(defun my-mas--remove-container (name)
+  "Remove the container NAME asynchronously, if it still exists."
+  (when-let* ((podman (my-mas--podman)))
+    (make-process :name "mas-podman-rm" :buffer nil :noquery t
+                  :command (list podman "rm" "-f" "--ignore" name)
+                  :sentinel #'ignore)))
+
 (defun my-mas--launcher-args (run role)
   "Return the launcher options of ROLE's container in RUN."
   (let ((mount (or (alist-get role (my-mas-run-mounts run))
@@ -624,7 +722,7 @@ EXCLUDES are extra pathspecs to ignore."
            "--outbox" (directory-file-name (my-mas-run-dir run))
            "--label" (format "sem.mas-run=%s" id)
            "--label" (format "sem.mas-flow=%s" (my-mas-run-flow run))
-           "--name" (format "mas-%s-%s" id role)
+           "--name" (my-mas--agent-name run role)
            "--timeout" (number-to-string my-desktop-mas-run-timeout))
      (unless (equal mount "rw")
        (list "--mount" mount)))))
@@ -781,20 +879,25 @@ them yourself (C-c g g).\n"))
                          (my-mas--file run "plan.md")))
          (insert "Nothing was committed.  Review the diff (C-c g) and \
 commit it yourself.\n")))
-      (insert "\nTranscripts: .agent-shell/transcripts/ in the project.\n"))
+      (insert (format "\nTranscripts: .agent-shell/transcripts/%s-<role>.md \
+in the project (-<n> for the n-th session of a role).\n"
+                      (my-mas-run-id run))))
     file))
 
 ;; ------------------------------------------------------------------
 ;; Engine
 ;; ------------------------------------------------------------------
 
-(defun my-mas--pause (run reason resume)
-  "Pause RUN for REASON; RESUME is called by `my-mas-continue'."
+(defun my-mas--pause (run reason resume &optional role)
+  "Pause RUN for REASON; RESUME is called by `my-mas-continue'.
+With ROLE, `my-mas-continue' also offers to resend the current step
+to a fresh session of ROLE's agent."
   (when (timerp (my-mas-run-idle-timer run))
     (cancel-timer (my-mas-run-idle-timer run)))
   (setf (my-mas-run-status run) 'paused
         (my-mas-run-reason run) reason
         (my-mas-run-pending run) resume
+        (my-mas-run-pause-role run) role
         (my-mas-run-waiting run) nil
         (my-mas-run-pause-requested run) nil)
   (my-mas--save run)
@@ -844,7 +947,16 @@ FORCE-STOP is non-nil."
             (my-mas--save run)
             (my-mas--refresh run)
             (my-mas--notify "%s waits at gate %s: check the work, then \
-C-c a m c" (my-mas-run-id run) (plist-get def :gate)))
+C-c a m c%s" (my-mas-run-id run) (plist-get def :gate)
+                            (if-let* ((summary (plist-get
+                                                (car (my-mas-run-history run))
+                                                :summary)))
+                                (format " (%s: %s)"
+                                        (plist-get (car (my-mas-run-history run))
+                                                   :step)
+                                        (truncate-string-to-width
+                                         summary 300 nil nil "…"))
+                              "")))
         (my-mas--run-step run (plist-get def :next))))
      ((and (plist-get def :bump) (not (my-mas--rounds-left-p run)))
       (my-mas--finish run 'limit
@@ -856,7 +968,9 @@ C-c a m c" (my-mas-run-id run) (plist-get def :gate)))
      (t
       (when (plist-get def :bump)
         (cl-incf (my-mas-run-n run)))
-      (my-mas--send run step)))))
+      (if (and (plist-get def :fresh) my-desktop-mas-fresh-sessions)
+          (my-mas--send-fresh run step)
+        (my-mas--send run step))))))
 
 (defun my-mas--enter-phase (run phase)
   "Start PHASE of RUN: a fresh round count, stall check and critique."
@@ -987,7 +1101,13 @@ Quitting the choice prompt keeps the discussion open."
         (when (plist-get def :tamper)
           (setf (my-mas-run-snapshot run)
                 (my-mas--worktree-snapshot
-                 (my-mas-run-root run) (my-mas--tamper-excludes def vars)))))
+                 (my-mas-run-root run) (my-mas--tamper-excludes def vars))))
+        (when (plist-get def :progress)
+          (setf (my-mas-run-baseline run)
+                (list :checked (or (car (my-mas--tasks
+                                         (my-mas--tasks-file run)))
+                                   0)
+                      :code (my-mas--code-snapshot run)))))
       (setf (my-mas-run-status run) 'running
             (my-mas-run-waiting run)
             (list :step step :role role :output output
@@ -1054,7 +1174,10 @@ Do not redo the work itself."
         (my-mas--pause run (format "%s result rejected: %s" step problem)
                        (lambda () (my-mas--send run step))))
        (t
-        (let ((data (cdr read)))
+        (let* ((data (cdr read))
+               (stuck (and (plist-get def :progress)
+                           (my-mas--measure-progress run data)
+                           my-desktop-mas-no-progress-limit)))
           (setf (my-mas-run-waiting run) nil)
           (dolist (field (plist-get def :capture))
             (setf (my-mas-run-params run)
@@ -1063,24 +1186,31 @@ Do not redo the work itself."
                                           (my-mas-run-params run)))))
           (push (list :step step :role role :n (my-mas-run-n run)
                       :phase (my-mas-run-phase run)
-                      :verdict (alist-get 'verdict data)
+                      :verdict (if stuck
+                                   (format "%s (no progress)"
+                                           (alist-get 'verdict data))
+                                 (alist-get 'verdict data))
                       :summary (alist-get 'summary data)
                       :file output
                       :time (format-time-string "%FT%T%z"))
                 (my-mas-run-history run))
-          (let ((changes (and (plist-get def :tamper)
-                              (my-mas--worktree-changes
-                               (my-mas-run-snapshot run)
-                               (my-mas--worktree-snapshot
-                                (my-mas-run-root run)
-                                (my-mas--tamper-excludes
-                                 def (my-mas--vars run def)))))))
-            (if changes
-                (my-mas--pause
-                 run (format "%s changed project files during %s: %s \
+          (when (and (plist-get def :progress) (not stuck))
+            (setf (my-mas-run-idle run) 0))
+          (if stuck
+              (my-mas--no-progress run step)
+            (let ((changes (and (plist-get def :tamper)
+                                (my-mas--worktree-changes
+                                 (my-mas-run-snapshot run)
+                                 (my-mas--worktree-snapshot
+                                  (my-mas-run-root run)
+                                  (my-mas--tamper-excludes
+                                   def (my-mas--vars run def)))))))
+              (if changes
+                  (my-mas--pause
+                   run (format "%s changed project files during %s: %s \
 \(check them; continue keeps going)" (my-mas--role-label run role) step changes)
-                 (lambda () (my-mas--advance run def data)))
-              (my-mas--advance run def data)))))))))
+                   (lambda () (my-mas--advance run def data)))
+                (my-mas--advance run def data))))))))))
 
 (defun my-mas--stalled-p (run data)
   "Record critique DATA in RUN; non-nil when the run is stalled."
@@ -1096,6 +1226,125 @@ Do not redo the work itself."
     (and my-desktop-mas-stall-rounds
          (>= (my-mas-run-stall run) my-desktop-mas-stall-rounds))))
 
+;; ------------------------------------------------------------------
+;; Progress and fresh sessions
+;; ------------------------------------------------------------------
+
+(defun my-mas--code-snapshot (run)
+  "Snapshot RUN's worktree outside the folder of its task list."
+  (my-mas--worktree-snapshot
+   (my-mas-run-root run)
+   (when-let* ((file (my-mas--tasks-file run)))
+     (list (concat ":(exclude)"
+                   (file-relative-name (file-name-directory file)
+                                       (my-mas-run-root run)))))))
+
+(defun my-mas--measure-progress (run data)
+  "Measure the implementer turn of RUN that reported DATA.
+Store the description for {{progress}}; return non-nil when the turn
+checked no new task, changed no code and reported no open blocking
+finding (a decision for the lead is progress too)."
+  (let* ((base (my-mas-run-baseline run))
+         (tasks (my-mas--tasks (my-mas--tasks-file run)))
+         (before (or (plist-get base :checked) 0))
+         (after (or (car tasks) 0))
+         (code-before (plist-get base :code))
+         (code-after (my-mas--code-snapshot run))
+         (known (and code-before code-after))
+         (changed (my-mas--worktree-changes code-before code-after))
+         (stat (string-trim
+                (or (my-mas--git (my-mas-run-root run) "diff" "--shortstat")
+                    ""))))
+    (setf (my-mas-run-progress run)
+          (format "- tasks.md: %s\n- code outside the change folder: %s\n\
+- uncommitted diff of tracked files: %s"
+                  (if tasks
+                      (format "%d of %d checked (%+d in the last turn)"
+                              after (+ after (length (cdr tasks)))
+                              (- after before))
+                    "not found")
+                  (cond ((not known) "unknown (not a git worktree)")
+                        (changed "changed in the last turn")
+                        (t "UNCHANGED in the last turn"))
+                  (if (string-empty-p stat) "none" stat)))
+    (and known (not changed) (<= after before)
+         (not (seq-find (lambda (f)
+                          (equal (alist-get 'severity f) "blocking"))
+                        (my-mas--open-findings data))))))
+
+(defun my-mas--no-progress (run step)
+  "Handle an implementer turn of RUN's STEP that made no progress.
+Retry the step in a fresh session; pause once
+`my-desktop-mas-no-progress-limit' turns in a row made none."
+  (let* ((role (plist-get (my-mas--step-def run step) :role))
+         (label (my-mas--role-label run role)))
+    (if (>= (cl-incf (my-mas-run-idle run)) my-desktop-mas-no-progress-limit)
+        (my-mas--pause run (format "%s made no progress %d turns in a row \
+\(no task checked, no code changed)" label (my-mas-run-idle run))
+                       (lambda () (my-mas--send run step))
+                       role)
+      (my-mas--notify "%s: %s made no progress on %s; retrying in a fresh \
+session" (my-mas-run-id run) label step)
+      (my-mas--send-fresh run step))))
+
+(defun my-mas--start-agent (run role)
+  "Start ROLE's agent of RUN in a new session; return its buffer.
+The buffer replaces ROLE's entry in the run's agents."
+  (let* ((harness (my-mas--role-harness run role))
+         (name (my-mas--agent-name run role))
+         (buffer (my-dsh-acp-start-owned
+                  :root (my-mas-run-root run) :harness harness
+                  :owner (my-mas-run-id run)
+                  :extra-args (my-mas--launcher-args run role)
+                  :config-options (alist-get role (my-mas-run-options run))
+                  :transcript (format "%s.md"
+                                      (string-remove-prefix "mas-" name))
+                  :buffer-name (format "%s MAS %s"
+                                       (my-dsh-acp--harness-name harness)
+                                       role))))
+    (unless (buffer-live-p buffer)
+      (error "agent-shell did not start the %s agent" role))
+    (if-let* ((cell (assq role (my-mas-run-agents run))))
+        (setcdr cell buffer)
+      (setf (my-mas-run-agents run)
+            (append (my-mas-run-agents run) (list (cons role buffer)))))
+    (my-mas--setup-agent run role buffer)
+    buffer))
+
+(defun my-mas--restart-agent (run role)
+  "Replace ROLE's agent of RUN with a new session in a new container.
+The new agent starts first and takes the old one's windows; then the
+old buffer is killed (its events are ignored: it is no longer the
+role's agent) and its container removed by name, so the run's label
+sweep never hits the new one."
+  (let ((old (my-mas--agent run role))
+        (old-name (my-mas--agent-name run role)))
+    (cl-incf (alist-get role (my-mas-run-generations run) 1))
+    (let ((new (my-mas--start-agent run role)))
+      (when (buffer-live-p old)
+        (when (fboundp 'persp-add-buffer)
+          (persp-add-buffer new))
+        (dolist (window (get-buffer-window-list old nil t))
+          (set-window-buffer window new))
+        (let ((kill-buffer-query-functions nil))
+          (kill-buffer old)))
+      (run-at-time my-mas--remove-delay nil
+                   #'my-mas--remove-container old-name)
+      new)))
+
+(defun my-mas--send-fresh (run step)
+  "Send STEP of RUN to a new session of its role's agent."
+  (let ((role (plist-get (my-mas--step-def run step) :role)))
+    (if (condition-case err
+            (progn (my-mas--restart-agent run role) t)
+          (error
+           (my-mas--pause run (format "could not start a fresh %s: %s"
+                                      (my-mas--role-label run role)
+                                      (error-message-string err))
+                          (lambda () (my-mas--send-fresh run step)))
+           nil))
+        (my-mas--send run step))))
+
 (defun my-mas--advance (run def data)
   "Leave step DEF of RUN with result DATA."
   (let* ((verdict (alist-get 'verdict data))
@@ -1109,7 +1358,8 @@ Do not redo the work itself."
      ((equal verdict "blocked")
       (my-mas--pause run (format "%s reports blocked: %s" step
                                  (alist-get 'summary data))
-                     (lambda () (my-mas--send run step))))
+                     (lambda () (my-mas--send run step))
+                     (plist-get def :role)))
      ((and (plist-get def :critique)
            (equal verdict "changes_requested")
            (my-mas--stalled-p run data))
@@ -1141,14 +1391,19 @@ Do not redo the work itself."
         (set-window-buffer (split-window-right) (cadr buffers))))))
 
 (defun my-mas--setup-agent (run role buffer)
-  "Tie agent BUFFER (ROLE) to RUN: mode line and event handlers."
+  "Tie agent BUFFER (ROLE) to RUN: mode line and event handlers.
+Turn and clean-up events count only while BUFFER is ROLE's agent: a
+buffer replaced by a fresh session (`my-mas--restart-agent') is
+killed without ending the run."
   (with-current-buffer buffer
     (setq-local my-mas--run run)
     (setq-local mode-line-misc-info
                 (cons '(:eval (my-mas--mode-line)) mode-line-misc-info)))
   (agent-shell-subscribe-to
    :shell-buffer buffer :event 'turn-complete
-   :on-event (lambda (event) (my-mas--on-turn-complete run role event)))
+   :on-event (lambda (event)
+               (when (eq buffer (my-mas--agent run role))
+                 (my-mas--on-turn-complete run role event))))
   (agent-shell-subscribe-to
    :shell-buffer buffer :event 'error
    :on-event (lambda (event)
@@ -1160,7 +1415,8 @@ Do not redo the work itself."
   (agent-shell-subscribe-to
    :shell-buffer buffer :event 'clean-up
    :on-event (lambda (_event)
-               (unless (my-mas-run-stopping run)
+               (unless (or (my-mas-run-stopping run)
+                           (not (eq buffer (my-mas--agent run role))))
                  ;; Outside the kill hook: stopping kills the other agent.
                  (run-at-time
                   0 nil
@@ -1213,22 +1469,7 @@ and :options (ROLE . ACP-CONFIG-OPTIONS)."
     (push run my-mas--runs)
     (condition-case err
         (dolist (entry (my-mas--flow-roles flow))
-          (let* ((role (car entry))
-                 (harness (alist-get role roles))
-                 (buffer (my-dsh-acp-start-owned
-                          :root root :harness harness :owner id
-                          :extra-args (my-mas--launcher-args run role)
-                          :config-options (alist-get role
-                                                     (my-mas-run-options run))
-                          :buffer-name (format "%s MAS %s"
-                                               (my-dsh-acp--harness-name
-                                                harness)
-                                               role))))
-            (unless (buffer-live-p buffer)
-              (error "agent-shell did not start the %s agent" role))
-            (setf (my-mas-run-agents run)
-                  (append (my-mas-run-agents run) (list (cons role buffer))))
-            (my-mas--setup-agent run role buffer)))
+          (my-mas--start-agent run (car entry)))
       (error
        (my-mas--finish run 'aborted
                        (format "starting the agents failed: %s"
@@ -1563,22 +1804,47 @@ first opens, then kept for the session (D resets it).")
                  (format " -- %s" (my-mas-run-reason run))
                ""))))
 
+(defun my-mas--read-resume (run)
+  "Ask how paused RUN goes on: `continue', `fresh' or `abort'.
+Only a pause that names a role (a `blocked' verdict, no progress)
+asks; other pauses and gates continue."
+  (if-let* (((eq (my-mas-run-status run) 'paused))
+            (role (my-mas-run-pause-role run)))
+      (pcase (car (read-multiple-choice
+                   (format "MAS %s paused at %s" (my-mas-run-id run)
+                           (my-mas-run-step run))
+                   `((?c "continue" "re-send the step in the same session")
+                     (?f "fresh session"
+                         ,(format "start a new %s session, then re-send"
+                                  (my-mas--role-label run role)))
+                     (?k "abort" "stop both agents"))))
+        (?f 'fresh)
+        (?k 'abort)
+        (_ 'continue))
+    'continue))
+
 ;;;###autoload
 (defun my-mas-continue ()
   "Continue the current run past a gate, a pause or a discussion.
 A discussion with choices (the plan presentation) asks what comes
-next.  While an agent is still working, offer to re-send its step
-prompt."
+next; a pause after a `blocked' verdict or turns without progress
+offers a fresh session of the agent.  While an agent is still
+working, offer to re-send its step prompt."
   (interactive)
   (let ((run (my-mas--current-run)))
     (pcase (my-mas-run-status run)
       ('discuss (my-mas--end-discussion run))
       ((or 'gate 'paused)
-       (let ((resume (my-mas-run-pending run)))
-         (setf (my-mas-run-pending run) nil
-               (my-mas-run-status run) 'running
-               (my-mas-run-reason run) nil)
-         (when resume (funcall resume))))
+       (let ((resume (my-mas-run-pending run))
+             (choice (my-mas--read-resume run)))
+         (if (eq choice 'abort)
+             (my-mas--finish run 'aborted "aborted by the operator" t)
+           (setf (my-mas-run-pending run) nil
+                 (my-mas-run-status run) 'running
+                 (my-mas-run-reason run) nil)
+           (if (eq choice 'fresh)
+               (my-mas--send-fresh run (my-mas-run-step run))
+             (when resume (funcall resume))))))
       ('running
        (when-let* ((waiting (my-mas-run-waiting run))
                    ((y-or-n-p (format "%s is still on %s; re-send the step? "

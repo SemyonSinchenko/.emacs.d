@@ -311,6 +311,12 @@
 (setq my-desktop-mas-max-iterations 20)
 ;; Where a run waits for C-c a m c (after-plan, before-archive):
 (setq my-desktop-mas-gates '(after-plan))
+;; openspec: every implementer fix round in a new session (nil: one
+;; session per run), and how many implementer turns in a row without
+;; progress (no new checked task, no code change) before the run pauses
+;; (the first ones are retried in a fresh session; nil: no check):
+(setq my-desktop-mas-fresh-sessions t)
+(setq my-desktop-mas-no-progress-limit 2)
 ;; Default harness per role (claude, codex or dsh).  C-c a m o / a ask for
 ;; every role with these as defaults (RET keeps them); a harness may
 ;; also play both roles:
