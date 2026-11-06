@@ -404,6 +404,70 @@ untracked file), unless `my-mas-test--no-code'."
         (should (equal (my-mas-test--step run) 'review))
         (should (eq (my-mas--agent run 'impl) second))))))
 
+(ert-deftest my-mas-fresh-session-waits-for-the-old-agent ()
+  ;; run-dsh exits 2 while the old container holds the role lock, so
+  ;; the new agent may start only once the old process is gone.
+  (my-mas-test--with-project
+    (let* ((run (my-mas-openspec "demo"))
+           (first (my-mas--agent run 'impl))
+           (old (make-process :name "mas-test-old-agent" :noquery t
+                              :command '("sleep" "30"))))
+      (unwind-protect
+          (cl-letf (((symbol-function 'my-mas--agent-process)
+                     (lambda (buffer) (and (eq buffer first) old))))
+            (my-mas-test--openspec-to-review run)
+            (my-mas-test--answer
+             run `((verdict . "changes_requested") (summary . "r")
+                   (findings . ,(vector (my-mas-test--finding "R1-1")))))
+            (should (equal (my-mas-run-step run) 'fix))
+            (should-not (buffer-live-p first))
+            (should-not (my-mas--agent run 'impl))
+            (should (= (length my-mas-test--started) 2))
+            (delete-process old)
+            (sleep-for 0.6)
+            (let ((second (my-mas--agent run 'impl)))
+              (should (buffer-live-p second))
+              (should (= (length my-mas-test--started) 3))
+              (should (eq (caar my-mas-test--prompts) second))
+              (should (equal (my-mas-test--step run) 'fix))))
+        (when (process-live-p old)
+          (delete-process old))))))
+
+(ert-deftest my-mas-dead-agent-pauses-the-run ()
+  (my-mas-test--with-project
+    (let* ((run (my-mas-openspec "demo"))
+           (impl (my-mas--agent run 'impl))
+           (proc (make-process :name "mas-test-agent" :noquery t
+                               :command '("sleep" "30")))
+           (exit "Agent process ended before completing request: \
+exited abnormally with code 2"))
+      (unwind-protect
+          (cl-letf (((symbol-function 'my-mas--agent-process)
+                     (lambda (buffer) (and (eq buffer impl) proc))))
+            (my-mas-test--answer run '((verdict . "done") (summary . "p")
+                                       (change . "demo") (findings . [])))
+            (should (equal (my-mas-test--step run) 'apply))
+            ;; An error of a live agent only notifies.
+            (my-mas-test--fire run 'error '((:message . "rate limited")))
+            (should (eq (my-mas-run-status run) 'running))
+            (delete-process proc)
+            (with-current-buffer impl
+              (setq my-mas--stderr "run-dsh: role mas-impl is already \
+running for this project\n"))
+            (my-mas-test--fire run 'error `((:message . ,exit)))
+            (should (eq (my-mas-run-status run) 'paused))
+            (should (string-match-p "code 2; stderr: run-dsh: role mas-impl"
+                                    (my-mas-run-reason run)))
+            ;; Continuing restarts the dead agent and resends the step.
+            (my-mas-test--continue run)
+            (should-not (buffer-live-p impl))
+            (should (eq (my-mas-run-status run) 'running))
+            (should (equal (my-mas-test--step run) 'apply))
+            (should (eq (caar my-mas-test--prompts)
+                        (my-mas--agent run 'impl))))
+        (when (process-live-p proc)
+          (delete-process proc))))))
+
 (ert-deftest my-mas-turn-without-progress-retries-fresh-then-pauses ()
   (my-mas-test--with-project
     (let ((run (my-mas-openspec "demo"))
@@ -562,12 +626,14 @@ untracked file), unless `my-mas-test--no-code'."
     (sleep-for 0.7)))
 
 (defun my-mas-test--continue (run &optional key)
-  "Run `my-mas-continue' in RUN, answering a choice prompt with KEY."
+  "Run `my-mas-continue' in RUN, answering a choice prompt with KEY.
+Wait a little: a fresh session starts once the old container is gone."
   (cl-letf (((symbol-function 'read-multiple-choice)
              (lambda (_prompt choices &rest _)
                (or (assq key choices) (error "No choice %c" key)))))
     (should (eq (my-mas--current-run) run))
-    (my-mas-continue)))
+    (my-mas-continue)
+    (sleep-for 0.3)))
 
 (defun my-mas-test--result (verdict &rest findings)
   "Return a result alist with VERDICT and FINDINGS."

@@ -342,7 +342,12 @@ machinery code; add a `defcustom` to `desktop-config-defs.el` and read it.
 - openspec fix rounds start the implementer in a fresh session and
   container (step key `:fresh`, `my-desktop-mas-fresh-sessions`;
   `my-mas--restart-agent`, names `mas-<id>-<role>-<gen>`, the old
-  container is removed by name, never by the run label). Implementer
+  container is removed by name, never by the run label). The old agent
+  goes first: the launchers allow one container per role and project
+  (run-dsh exits 2 while the role lock is held), so the new one starts
+  only after the old process exited and its container is gone. An
+  agent whose process dies pauses the run with its stderr tail;
+  C-c a m c restarts it fresh. Implementer
   steps are measured (`:progress`: checked tasks of the flow's `:tasks`
   file, code changes): a turn without progress or a blocking finding
   skips the review and is retried fresh, then the run pauses

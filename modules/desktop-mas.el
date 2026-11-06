@@ -80,12 +80,15 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'map)
 (require 'seq)
 (require 'subr-x)
 (require 'transient)
 (require 'desktop-config-defs)
 (require 'desktop-dsh-acp)
 
+(declare-function acp-subscribe-to-errors "acp" t)
+(declare-function agent-shell--state "agent-shell" t)
 (declare-function agent-shell-insert "agent-shell" t)
 (declare-function agent-shell-subscribe-to "agent-shell" t)
 (declare-function notifications-notify "notifications" t)
@@ -237,6 +240,15 @@ first step, :steps the steps as (STEP . PLIST):
   "Seconds between killing the agent buffers and `podman rm -f'.
 agent-shell sends SIGTERM, then SIGKILL after a grace period; this
 leaves time for a clean container exit before forcing it.")
+
+(defconst my-mas--exit-timeout 15
+  "Seconds a replaced agent's process may take to exit.
+A fresh session waits for it (the launcher allows one container per
+role and project, see `my-mas--restart-agent'); after the timeout
+its container is removed anyway.  acp.el sends SIGKILL after 5 s.")
+
+(defconst my-mas--stderr-limit 2000
+  "Characters of an agent's stderr kept for failure reports.")
 
 (defun my-mas--flow (flow)
   "Return the plist of FLOW."
@@ -702,12 +714,19 @@ generation) gets a new name, as the old container may still exit."
     (format "mas-%s-%s%s" (my-mas-run-id run) role
             (if (> gen 1) (format "-%d" gen) ""))))
 
-(defun my-mas--remove-container (name)
-  "Remove the container NAME asynchronously, if it still exists."
-  (when-let* ((podman (my-mas--podman)))
-    (make-process :name "mas-podman-rm" :buffer nil :noquery t
-                  :command (list podman "rm" "-f" "--ignore" name)
-                  :sentinel #'ignore)))
+(defun my-mas--remove-container (name &optional then)
+  "Remove the container NAME asynchronously, if it still exists.
+Call THEN (no arguments) once podman is done, whatever its status."
+  (if-let* ((podman (my-mas--podman)))
+      (make-process :name "mas-podman-rm" :buffer nil :noquery t
+                    :command (list podman "rm" "-f" "--ignore" name)
+                    :sentinel
+                    (lambda (proc _event)
+                      (when (and then (memq (process-status proc)
+                                            '(exit signal)))
+                        (funcall then))))
+    (when then
+      (funcall then))))
 
 (defun my-mas--launcher-args (run role)
   "Return the launcher options of ROLE's container in RUN."
@@ -1311,39 +1330,78 @@ The buffer replaces ROLE's entry in the run's agents."
     (my-mas--setup-agent run role buffer)
     buffer))
 
-(defun my-mas--restart-agent (run role)
-  "Replace ROLE's agent of RUN with a new session in a new container.
-The new agent starts first and takes the old one's windows; then the
-old buffer is killed (its events are ignored: it is no longer the
-role's agent) and its container removed by name, so the run's label
-sweep never hits the new one."
-  (let ((old (my-mas--agent run role))
-        (old-name (my-mas--agent-name run role)))
-    (cl-incf (alist-get role (my-mas-run-generations run) 1))
-    (let ((new (my-mas--start-agent run role)))
-      (when (buffer-live-p old)
-        (when (fboundp 'persp-add-buffer)
-          (persp-add-buffer new))
-        (dolist (window (get-buffer-window-list old nil t))
-          (set-window-buffer window new))
-        (let ((kill-buffer-query-functions nil))
-          (kill-buffer old)))
-      (run-at-time my-mas--remove-delay nil
-                   #'my-mas--remove-container old-name)
-      new)))
+(defun my-mas--agent-client (buffer)
+  "Return the ACP client of agent-shell BUFFER, or nil."
+  (and (buffer-live-p buffer)
+       (fboundp 'agent-shell--state)
+       (with-current-buffer buffer
+         (and (derived-mode-p 'agent-shell-mode)
+              (map-elt (agent-shell--state) :client)))))
 
-(defun my-mas--send-fresh (run step)
-  "Send STEP of RUN to a new session of its role's agent."
-  (let ((role (plist-get (my-mas--step-def run step) :role)))
-    (if (condition-case err
-            (progn (my-mas--restart-agent run role) t)
-          (error
-           (my-mas--pause run (format "could not start a fresh %s: %s"
-                                      (my-mas--role-label run role)
-                                      (error-message-string err))
-                          (lambda () (my-mas--send-fresh run step)))
-           nil))
-        (my-mas--send run step))))
+(defun my-mas--agent-process (buffer)
+  "Return the launcher process of agent-shell BUFFER, or nil."
+  (when-let* ((client (my-mas--agent-client buffer)))
+    (map-elt client :process)))
+
+(defun my-mas--after-exit (process name then &optional deadline)
+  "Call THEN once PROCESS has exited and container NAME is gone.
+PROCESS may be nil.  Poll until it exits or `my-mas--exit-timeout'
+\(DEADLINE) passes, then remove the container by name: the role lock
+may outlive the launcher in podman's conmon."
+  (let ((deadline (or deadline (+ (float-time) my-mas--exit-timeout))))
+    (if (and (process-live-p process) (< (float-time) deadline))
+        (run-at-time 0.2 nil #'my-mas--after-exit process name then deadline)
+      (my-mas--remove-container name then))))
+
+(defun my-mas--restart-agent (run role then on-error)
+  "Replace ROLE's agent of RUN with a new session in a new container.
+The old agent goes first: run-dsh (like every launcher with --role)
+allows one container per role and project and exits 2 while the old
+one still holds the role lock.  So the old buffer is detached (its
+events are ignored) and killed, its process awaited and its container
+removed by name (the run's label sweep never hits the new one); only
+then the new agent starts and takes the old one's windows.  Call THEN
+\(no arguments) once it started, or ON-ERROR with the error.  Nothing
+starts when the run stops meanwhile."
+  (let* ((old (my-mas--agent run role))
+         (process (my-mas--agent-process old))
+         (windows (and (buffer-live-p old)
+                       (get-buffer-window-list old nil t)))
+         (old-name (my-mas--agent-name run role)))
+    (setf (alist-get role (my-mas-run-agents run)) nil)
+    (cl-incf (alist-get role (my-mas-run-generations run) 1))
+    (when (buffer-live-p old)
+      (let ((kill-buffer-query-functions nil))
+        (kill-buffer old)))
+    (my-mas--after-exit
+     process old-name
+     (lambda ()
+       (when (and (my-mas--active-p run) (not (my-mas-run-stopping run)))
+         (when-let* ((new (condition-case err
+                              (my-mas--start-agent run role)
+                            (error (funcall on-error err) nil))))
+           (when (and windows (fboundp 'persp-add-buffer))
+             (persp-add-buffer new))
+           (dolist (window windows)
+             (when (window-live-p window)
+               (set-window-buffer window new)))
+           (funcall then)))))))
+
+(defun my-mas--send-fresh (run step &optional role)
+  "Send STEP of RUN to a new session of its role's agent.
+With ROLE, restart that role's agent instead (e.g. a dead one)."
+  (let ((role (or role (plist-get (my-mas--step-def run step) :role))))
+    (setf (my-mas-run-status run) 'running
+          (my-mas-run-waiting run) nil)
+    (my-mas--refresh run)
+    (my-mas--restart-agent
+     run role
+     (lambda () (my-mas--send run step))
+     (lambda (err)
+       (my-mas--pause run (format "could not start a fresh %s: %s"
+                                  (my-mas--role-label run role)
+                                  (error-message-string err))
+                      (lambda () (my-mas--send-fresh run step role)))))))
 
 (defun my-mas--advance (run def data)
   "Leave step DEF of RUN with result DATA."
@@ -1390,11 +1448,60 @@ sweep never hits the new one."
       (when (cdr buffers)
         (set-window-buffer (split-window-right) (cadr buffers))))))
 
+(defvar-local my-mas--stderr nil
+  "The tail of this agent's stderr (`my-mas--stderr-limit' characters).")
+
+(defvar-local my-mas--stderr-client nil
+  "The ACP client whose stderr `my-mas--stderr' collects.")
+
+(defun my-mas--tap-stderr (buffer)
+  "Collect the stderr of agent BUFFER's ACP client, once it exists.
+acp.el kills its stderr buffer when the process exits, so a launcher
+that fails at startup leaves its reason only here."
+  (when-let* ((client (my-mas--agent-client buffer))
+              ((not (eq client (buffer-local-value 'my-mas--stderr-client
+                                                   buffer)))))
+    (with-current-buffer buffer
+      (setq my-mas--stderr-client client)
+      (acp-subscribe-to-errors
+       :client client :buffer buffer
+       :on-error (lambda (err)
+                   (when-let* ((text (map-elt err 'message))
+                               ((stringp text)))
+                     (setq my-mas--stderr
+                           (let ((all (concat my-mas--stderr text)))
+                             (substring all (max 0 (- (length all)
+                                                      my-mas--stderr-limit)))))))))))
+
+(defun my-mas--agent-exited (run role buffer message)
+  "Pause RUN: ROLE's agent BUFFER lost its process (ACP error MESSAGE).
+The reason carries the end of its stderr; continuing restarts ROLE in
+a fresh session and resends the current step."
+  (unless (or (my-mas-run-stopping run) (my-mas--finished-p run)
+              (not (my-mas--active-p run))
+              (eq (my-mas-run-status run) 'paused))
+    (let* ((stderr (string-trim
+                    (replace-regexp-in-string
+                     "[\n\r]+" " "
+                     (or (buffer-local-value 'my-mas--stderr buffer) ""))))
+           (step (my-mas-run-step run)))
+      (my-mas--pause
+       run (format "the %s agent exited: %s%s" (my-mas--role-label run role)
+                   message
+                   (if (string-empty-p stderr)
+                       ""
+                     (format "; stderr: %s"
+                             (if (> (length stderr) 400)
+                                 (concat "…" (substring stderr -400))
+                               stderr))))
+       (lambda () (my-mas--send-fresh run step role))))))
+
 (defun my-mas--setup-agent (run role buffer)
   "Tie agent BUFFER (ROLE) to RUN: mode line and event handlers.
-Turn and clean-up events count only while BUFFER is ROLE's agent: a
-buffer replaced by a fresh session (`my-mas--restart-agent') is
-killed without ending the run."
+Turn, error and clean-up events count only while BUFFER is ROLE's
+agent: a buffer replaced by a fresh session (`my-mas--restart-agent')
+is killed without ending the run.  An ACP error after the agent's
+process died (e.g. the launcher refused to start) pauses the run."
   (with-current-buffer buffer
     (setq-local my-mas--run run)
     (setq-local mode-line-misc-info
@@ -1404,14 +1511,21 @@ killed without ending the run."
    :on-event (lambda (event)
                (when (eq buffer (my-mas--agent run role))
                  (my-mas--on-turn-complete run role event))))
+  (my-mas--tap-stderr buffer)
+  (agent-shell-subscribe-to
+   :shell-buffer buffer :event 'init-client
+   :on-event (lambda (_event) (my-mas--tap-stderr buffer)))
   (agent-shell-subscribe-to
    :shell-buffer buffer :event 'error
    :on-event (lambda (event)
-               (my-mas--notify "%s: ACP error from %s: %s"
-                               (my-mas-run-id run)
-                               (my-mas--role-label run role)
-                               (alist-get :message
-                                          (alist-get :data event)))))
+               (when (eq buffer (my-mas--agent run role))
+                 (let ((message (alist-get :message (alist-get :data event))))
+                   (my-mas--notify "%s: ACP error from %s: %s"
+                                   (my-mas-run-id run)
+                                   (my-mas--role-label run role) message)
+                   (when-let* ((process (my-mas--agent-process buffer))
+                               ((not (process-live-p process))))
+                     (my-mas--agent-exited run role buffer message))))))
   (agent-shell-subscribe-to
    :shell-buffer buffer :event 'clean-up
    :on-event (lambda (_event)
