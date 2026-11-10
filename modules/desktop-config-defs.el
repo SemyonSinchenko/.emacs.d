@@ -874,6 +874,32 @@ like `my-desktop-dsh-acp-default-config-options'."
   :type '(alist :key-type string :value-type string)
   :group 'my-desktop)
 
+(defcustom my-desktop-claude-work-acp-command '("claude-agent-acp")
+  "Command that starts the host Claude Code ACP server over stdio.
+The `Claude (work)' harness: no container, the command runs on the
+host in the project directory with the host's Claude login (by
+default ~/.claude, i.e. the subscription `claude /login' set up on the
+host), so MCP servers and tools configured there are available.  The
+first element is resolved on `exec-path'."
+  :type '(repeat string)
+  :group 'my-desktop)
+
+(defcustom my-desktop-claude-work-acp-environment nil
+  "Extra environment of the host `Claude (work)' ACP server.
+A list of \"NAME=VALUE\" strings put before the inherited Emacs
+environment, for example (\"CLAUDE_CONFIG_DIR=/home/me/.claude-work\")
+to pick a non-default login.  ANTHROPIC_API_KEY is always emptied, so
+the subscription login is used."
+  :type '(repeat string)
+  :group 'my-desktop)
+
+(defcustom my-desktop-claude-work-acp-default-config-options nil
+  "Default ACP config options for new `Claude (work)' sessions.
+An alist of (OPTION . VALUE), passed to agent-shell like
+`my-desktop-claude-acp-default-config-options'."
+  :type '(alist :key-type string :value-type string)
+  :group 'my-desktop)
+
 ;; ------------------------------------------------------------------
 ;; 9d. Multi-agent runs (desktop-mas) and podman helpers
 ;; ------------------------------------------------------------------

@@ -276,6 +276,16 @@
 ;; (setq my-desktop-codex-acp-default-config-options
 ;;       '(("reasoning_effort" . "high")))
 
+;; "Claude (work)" in the C-c a d r picker: Claude Code on the HOST, no
+;; container, with the host login (~/.claude, `claude /login' once) and
+;; its MCP servers.  Chat only; multi-agent runs never offer it.
+;; (setq my-desktop-claude-work-acp-command '("claude-agent-acp"))
+;; Another login dir (the personal one stays with run-claude):
+;; (setq my-desktop-claude-work-acp-environment
+;;       '("CLAUDE_CONFIG_DIR=/home/sem/.claude"))
+;; (setq my-desktop-claude-work-acp-default-config-options
+;;       '(("model" . "...")))
+
 ;; ------------------------------------------------------------------
 ;; 9d. Multi-agent runs (C-c a m) and podman (C-c p)
 ;;     Two agents on one project, side by side, driven by Emacs:

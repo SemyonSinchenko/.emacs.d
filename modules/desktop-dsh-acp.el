@@ -9,6 +9,12 @@
 ;; (codex-acp).  agent-shell owns the client and the chat UI; for it
 ;; the harness is only a different command, see `my-dsh-acp--harnesses'.
 ;;
+;; `Claude (work)' is the one host harness: no container, it runs
+;; `claude-agent-acp' straight on the host with the host's Claude login
+;; (the work subscription, `my-desktop-claude-work-acp-command' /
+;; `-environment').  It is a chat harness only; multi-agent runs need
+;; the launcher options and never offer it (see `my-dsh-acp--mas-harnesses').
+;;
 ;; One agent-shell buffer per project and harness.  Opening an agent
 ;; focuses the existing buffer instead of starting another ACP process;
 ;; a new shell always starts a new session (no agent-shell session
@@ -122,13 +128,31 @@ install it from MELPA")))
            :command-var my-desktop-codex-acp-command
            :options-var my-desktop-codex-acp-default-config-options
            :base agent-shell-openai-make-codex-config
-           :launcher "run-codex"))
+           :launcher "run-codex")
+    (claude-work :name "Claude (work)"
+                 :identifier claude-work-acp
+                 :mode-line "Claude work ACP"
+                 :command-var my-desktop-claude-work-acp-command
+                 :options-var my-desktop-claude-work-acp-default-config-options
+                 :env-var my-desktop-claude-work-acp-environment
+                 :base agent-shell-anthropic-make-claude-code-config
+                 :host t))
   "ACP harnesses, as (KEY . PLIST).
 :name is shown in prompts, :identifier and :mode-line tag the
 agent-shell config (:mode-line also lands in the transcript's
 `agent' field), :command-var / :options-var name the settings read at
 call time, and :base returns the stock agent-shell config whose
-welcome text, icon and session meta are reused.")
+welcome text, icon and session meta are reused.  :launcher names the
+sem-dev-container launcher; a :host harness has none, runs its command
+on the host with the extra environment of :env-var and cannot take
+part in multi-agent runs.")
+
+(defun my-dsh-acp--mas-harnesses ()
+  "Return the harnesses usable in multi-agent runs, as (KEY . PLIST).
+Only launcher harnesses: a run passes --role / --outbox / --label to
+the launcher and removes the containers by label."
+  (seq-remove (lambda (entry) (plist-get (cdr entry) :host))
+              my-dsh-acp--harnesses))
 
 (defvar my-dsh-acp--last-harness 'dsh
   "Harness picked last; the default of the next harness prompt.")
@@ -192,7 +216,17 @@ launcher-side even when the configured command contains `--'."
     (agent-shell--make-acp-client
      :command (car command)
      :command-params (append extra-args (cdr command))
+     :environment-variables (my-dsh-acp--harness-environment harness)
      :context-buffer buffer)))
+
+(defun my-dsh-acp--harness-environment (harness)
+  "Return the extra process environment of HARNESS, or nil.
+Launcher harnesses get none.  A :host harness gets the entries of its
+:env-var; the Claude login wins over an ANTHROPIC_API_KEY inherited
+from Emacs (empty value, like agent-shell's :login authentication)."
+  (when (my-dsh-acp--harness-get harness :host)
+    (append (symbol-value (my-dsh-acp--harness-get harness :env-var))
+            '("ANTHROPIC_API_KEY="))))
 
 (defun my-dsh-acp--merge-options (defaults overrides)
   "Return the config options DEFAULTS with OVERRIDES applied on top.
@@ -233,10 +267,13 @@ the harness's default ACP config options (e.g. its model)."
           (lambda () (my-dsh-acp--merge-options (symbol-value options-var)
                                                 config-options))
           (alist-get :install-instructions config)
-          (format "Install %s from sem-dev-container on `exec-path'; the
+          (if-let* ((launcher (my-dsh-acp--harness-get harness :launcher)))
+              (format "Install %s from sem-dev-container on `exec-path'; the
 image must provide `%s --acp'."
-                  (my-dsh-acp--harness-get harness :launcher)
-                  (my-dsh-acp--harness-get harness :launcher)))
+                      launcher launcher)
+            (format "Install `%s' on the host `exec-path' (`%s')."
+                    (car (my-dsh-acp--harness-command harness))
+                    (my-dsh-acp--harness-get harness :command-var))))
     config))
 
 (defun my-dsh-acp--project-root (&optional no-fallback)
@@ -329,9 +366,11 @@ With SESSION-ID, resume that session instead."
     (unless (and (consp command) (stringp (car command)))
       (user-error "ACP: `%s' must be a non-empty list of strings" var))
     (unless (executable-find (car command))
-      (user-error "ACP: `%s' not found on `exec-path'; \
-install it from sem-dev-container"
-                  (car command))))
+      (user-error "ACP: `%s' not found on `exec-path'; install it %s"
+                  (car command)
+                  (if (my-dsh-acp--harness-get harness :host)
+                      "on the host"
+                    "from sem-dev-container"))))
   ;; Load agent-shell before let-binding its option: its `defcustom'
   ;; must establish the global default, and it does not override an
   ;; already-bound value.
@@ -369,14 +408,19 @@ same second would share).  Always a new session; the buffer is not
 displayed (the owner lays out its windows)."
   (unless owner
     (error "my-dsh-acp-start-owned: OWNER is required"))
+  (when (my-dsh-acp--harness-get harness :host)
+    (user-error "ACP: %s runs on the host and cannot be started for %s"
+                (my-dsh-acp--harness-name harness) owner))
   (let ((command (my-dsh-acp--harness-command harness))
         (var (my-dsh-acp--harness-get harness :command-var)))
     (unless (and (consp command) (stringp (car command)))
       (user-error "ACP: `%s' must be a non-empty list of strings" var))
     (unless (executable-find (car command))
-      (user-error "ACP: `%s' not found on `exec-path'; \
-install it from sem-dev-container"
-                  (car command))))
+      (user-error "ACP: `%s' not found on `exec-path'; install it %s"
+                  (car command)
+                  (if (my-dsh-acp--harness-get harness :host)
+                      "on the host"
+                    "from sem-dev-container"))))
   (my-dsh-acp--require-agent-shell)
   (let* ((default-directory root)
          (agent-shell-session-strategy 'new)

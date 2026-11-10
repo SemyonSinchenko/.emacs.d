@@ -266,7 +266,7 @@ its container is removed anyway.  acp.el sends SIGKILL after 5 s.")
 role of FLOW; return ROLES."
   (dolist (entry (my-mas--flow-roles flow))
     (let ((harness (alist-get (car entry) roles)))
-      (unless (alist-get harness my-dsh-acp--harnesses)
+      (unless (alist-get harness (my-dsh-acp--mas-harnesses))
         (user-error "MAS: role %s of %s has no known harness (%S)"
                     (car entry) flow harness))))
   roles)
@@ -277,7 +277,7 @@ Any harness may play any role, also both roles (they run as separate
 containers with separate --role state)."
   (let* ((choices (mapcar (lambda (entry)
                             (cons (plist-get (cdr entry) :name) (car entry)))
-                          my-dsh-acp--harnesses))
+                          (my-dsh-acp--mas-harnesses)))
          (completion-extra-properties '(:display-sort-function identity)))
     (mapcar
      (lambda (entry)
@@ -1757,7 +1757,7 @@ first opens, then kept for the session (D resets it).")
   "Ask for ROLE's harness; a new harness drops ROLE's model."
   (let* ((choices (mapcar (lambda (entry)
                             (cons (plist-get (cdr entry) :name) (car entry)))
-                          my-dsh-acp--harnesses))
+                          (my-dsh-acp--mas-harnesses)))
          (completion-extra-properties '(:display-sort-function identity))
          (current (alist-get role (my-mas--pair-get :roles)))
          (harness (cdr (assoc (completing-read

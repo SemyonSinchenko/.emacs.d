@@ -831,5 +831,21 @@ Wait a little: a fresh session starts once the old container is gone."
                  '(("model" . "b") ("effort" . "high"))))
   (should (equal (my-dsh-acp--merge-options nil nil) nil)))
 
+(ert-deftest my-mas-acp-host-harness ()
+  "The host Claude harness is chat-only and gets its own environment."
+  (should (alist-get 'claude-work my-dsh-acp--harnesses))
+  (should-not (alist-get 'claude-work (my-dsh-acp--mas-harnesses)))
+  (should (alist-get 'claude (my-dsh-acp--mas-harnesses)))
+  (should-error (my-mas--check-roles
+                 'openspec '((lead . claude-work) (implementer . claude)))
+                :type 'user-error)
+  (should-error (my-dsh-acp-start-owned :root "/tmp/" :harness 'claude-work
+                                        :owner "run")
+                :type 'user-error)
+  (should-not (my-dsh-acp--harness-environment 'claude))
+  (let ((my-desktop-claude-work-acp-environment '("CLAUDE_CONFIG_DIR=/x")))
+    (should (equal (my-dsh-acp--harness-environment 'claude-work)
+                   '("CLAUDE_CONFIG_DIR=/x" "ANTHROPIC_API_KEY=")))))
+
 (provide 'desktop-mas-tests)
 ;;; desktop-mas-tests.el ends here

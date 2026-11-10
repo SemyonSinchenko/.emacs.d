@@ -370,6 +370,11 @@ machinery code; add a `defcustom` to `desktop-config-defs.el` and read it.
   `:approve-clean` critiques may approve only with no open finding,
   minor ones included. Per-role models go to the agents as ACP config
   options (`my-dsh-acp-start-owned :config-options`).
+- The `Claude (work)` ACP harness (`:host t` in `my-dsh-acp--harnesses`)
+  runs `claude-agent-acp` on the host, no container, with the host
+  Claude login (`my-desktop-claude-work-acp-command` / `-environment`).
+  It is C-c a d only: `my-dsh-acp--mas-harnesses` drops it from runs and
+  `my-dsh-acp-start-owned` refuses it.
 - Roles are per run: C-c a m o / a ask which harness plays each role
   (defaults from `my-desktop-mas-roles'); steps, prompts and mounts
   depend on the role only, never on the harness.
