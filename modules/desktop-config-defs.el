@@ -817,7 +817,7 @@ Needs `agent-shell' (installed from MELPA) and the `run-dsh' /
 `run-claude' / `run-codex' launchers with `--acp' support
 \(sem-dev-container).  A missing launcher only fails its own harness.
 The `C-c a d' menu asks which harness to use.  The old dsh-emacs
-web integration stays available through `C-c d'."
+web integration stays available through `M-x my-dsh-open'."
   :type 'boolean
   :group 'my-desktop)
 
@@ -1279,6 +1279,56 @@ a work period starts, `org-clock-out' on breaks and stops."
 (defcustom my-desktop-pomodoro-sound t
   "Play the pomm bell on period switches.  Needs a .wav player
 (aplay or afplay); silently stays off when none is found."
+  :type 'boolean
+  :group 'my-desktop)
+
+;; ------------------------------------------------------------------
+;; Databricks workbench (dbx-el, C-c d)
+;; ------------------------------------------------------------------
+
+(defcustom my-desktop-enable-dbx nil
+  "Load desktop-dbx: the dbx-el Databricks workbench under C-c d.
+Installs dbx-el from GitHub (package-vc) on first start.  Needs the
+`databricks' CLI (>= 1.25); uv for the Python REPL; Graphviz `dot'
+for graphical graphs (optional)."
+  :type 'boolean
+  :group 'my-desktop)
+
+(defcustom my-desktop-dbx-url "https://github.com/SemyonSinchenko/dbx-el"
+  "Git URL dbx-el is installed from."
+  :type 'string
+  :group 'my-desktop)
+
+(defcustom my-desktop-dbx-contexts nil
+  "Databricks contexts, copied to `dbx-contexts' when non-nil.
+A list of plists, e.g.
+  ((:name \"dev\" :profile \"dev\" :warehouse \"1a2b...\"))
+nil leaves dbx-el to use the profiles in ~/.databrickscfg directly.
+Workspace ids belong in desktop-config-local.el."
+  :type '(repeat plist)
+  :group 'my-desktop)
+
+(defcustom my-desktop-dbx-favorites-file-name ".dbx-el.org"
+  "Per-project Org file of favorite Databricks jobs (C-c d f).
+Looked up upwards from `default-directory'; created at the project
+root on the first star.  No file means no favorites."
+  :type 'string
+  :group 'my-desktop)
+
+(defcustom my-desktop-dbx-favorites-runs 10
+  "Latest runs shown per favorite job (1..25)."
+  :type 'integer
+  :group 'my-desktop)
+
+(defcustom my-desktop-dbx-favorites-refresh 20
+  "Seconds between favorites dashboard refreshes while a run is active.
+Each refresh is one CLI call per favorite; when nothing runs the
+dashboard uses `dbx-page-refresh-idle' (60 s)."
+  :type 'number
+  :group 'my-desktop)
+
+(defcustom my-desktop-dbx-mode-line t
+  "Show the current dbx context in the mode line (`dbx-mode-line-mode')."
   :type 'boolean
   :group 'my-desktop)
 

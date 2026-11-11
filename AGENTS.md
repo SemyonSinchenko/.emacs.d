@@ -52,6 +52,8 @@ configurations**:
 │   ├── desktop-dsh-acp.el   # DSH / Claude / Codex ACP agents through agent-shell (default)
 │   ├── desktop-mas.el       # Multi-agent runs (C-c a m): openspec, architecture, pair flows
 │   ├── desktop-podman.el    # C-c p podman helpers (container picker)
+│   ├── desktop-dbx.el       # dbx-el Databricks workbench under C-c d
+│   ├── desktop-dbx-favorites.el # favorite jobs dashboard (loads with dbx-jobs)
 │   ├── desktop-edit.el      # JSON/YAML/TOML/Markdown/CSV editing + apheleia
 │   ├── desktop-git-explain.el # C-c g e: gptel explainer of uncommitted changes
 │   ├── desktop-lexicon.el   # lexicon-org AI text transforms
@@ -234,8 +236,14 @@ Always include `lexical-binding: t` at the top of every file.
     `C-c t` / `C-c T` (terminal), `C-c p` (podman prefix: `l` pick a
     running container, RET copies its ID; bound only when
     `desktop-podman' is loaded),
-    `C-c M-w` (copy image at point), `C-c d` (DSH container,
-    `my-dsh-open`, bound only when `desktop-dsh' is loaded),
+    `C-c M-w` (copy image at point), `C-c d` (dbx-el Databricks
+    prefix `dbx-command-map`: `d` menu, `x` context, `s` SQL, `z`
+    REPL, `D` doctor, `o` open ID / URL, plus ours: `f` favorite jobs
+    (per project, `.dbx-el.org` at the root, created on the first
+    star) and `*` star in dbx job/run pages and job/run lists (keys
+    contexts `dbx` / `dbx-page`); bound only when `desktop-dbx' is
+    loaded;
+    the DSH web session is `M-x my-dsh-open`),
     `C-x x f` (apheleia format,
     bound by desktop-edit.el when `my-desktop-enable-apheleia').
   - `RET` in Dired opens video files (`my-desktop-video-extensions`)
@@ -423,6 +431,7 @@ machinery code; add a `defcustom` to `desktop-config-defs.el` and read it.
 The Desktop modules additionally use (all optional, degrade gracefully):
 `mpv` (music), `rclone` (sync), `transmission-daemon` (torrents),
 `docker` (telega TDLib option), `podman` (C-c p, multi-agent runs),
+`databricks` CLI + `uv` (dbx-el, C-c d),
 and a SearXNG instance (Desktop AI
 web search, see `my-desktop-ai-searxng-url`).
 

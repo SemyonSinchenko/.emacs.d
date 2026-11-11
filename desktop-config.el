@@ -259,7 +259,7 @@
 ;;     file to an agent (asks which only when several run).  One agent
 ;;     per project and harness.
 ;;     Old dsh-emacs web setup is still loaded but not in the menu:
-;;     C-c d runs my-dsh-open, M-x my-dsh-kill stops it, and
+;;     M-x my-dsh-open runs it, M-x my-dsh-kill stops it, and
 ;;     M-x my-dsh-open-web opens the browser setup page.
 ;; ------------------------------------------------------------------
 (setq my-desktop-enable-dsh t)
@@ -348,6 +348,38 @@
 ;; Container lifetime backstop (seconds) and the still-working notice:
 ;; (setq my-desktop-mas-run-timeout (* 6 60 60))
 ;; (setq my-desktop-mas-turn-idle-timeout (* 15 60))
+
+;; ------------------------------------------------------------------
+;; 9e. Databricks workbench (dbx-el, C-c d)
+;;     Installed from GitHub on first start.  Needs the `databricks'
+;;     CLI (auth from ~/.databrickscfg); uv for the Python REPL.
+;;       C-c d d  menu          C-c d x  select context
+;;       C-c d j/J  job / jobs  C-c d r/R  run / active runs
+;;       C-c d c/C  clusters    C-c d w/W  warehouses
+;;       C-c d s  SQL editor    C-c d h  query history
+;;       C-c d p/P  pipelines   C-c d b  bundle menu
+;;       C-c d g  graph         C-c d z  Python REPL
+;;       C-c d !  watched runs  C-c d D  doctor
+;;       C-c d o  open a pasted ID or workspace URL (job, run,
+;;                cluster, warehouse, pipeline)
+;;       C-c d f  favorite jobs: latest runs of each, RET opens the
+;;                job, a adds, k removes, e edits the Org file
+;;       *        (job/run page, jobs/runs list) star / unstar
+;;     Favorites are per project: .dbx-el.org at the project root,
+;;     created on the first star (no file = no favorites).  One heading
+;;     per job, properties DBX_JOB_ID + DBX_CONTEXT; notes are fine.
+;; ------------------------------------------------------------------
+(setq my-desktop-enable-dbx t)
+(setq my-desktop-dbx-mode-line t)
+;; (setq my-desktop-dbx-favorites-file-name ".dbx-el.org")
+(setq my-desktop-dbx-favorites-runs 10)     ; runs shown per favorite
+(setq my-desktop-dbx-favorites-refresh 20)  ; seconds, while a run is active
+;; Contexts (nil: use the ~/.databrickscfg profiles directly).  Put
+;; real cluster / warehouse ids in desktop-config-local.el:
+;; (setq my-desktop-dbx-contexts
+;;       '((:name "dev" :profile "dev" :cluster "0612-..." :warehouse "1a2b...")
+;;         (:name "prod" :profile "prod" :serverless t :warehouse "9f8e..."
+;;          :catalog "main" :schema "analytics" :confirm t)))
 
 ;; ------------------------------------------------------------------
 ;; 10. Home tab

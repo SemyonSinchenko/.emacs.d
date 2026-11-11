@@ -30,6 +30,10 @@
 ;; Git lives under C-c g: g Magit status, s/u/a difftastic diff of
 ;; staged/unstaged/all changes, f diff of one picked changed file,
 ;; e LLM explainer of the changes (desktop-git-explain).
+;; Databricks (dbx-el) lives under C-c d: d menu, x context, j/J jobs,
+;; s SQL editor, z Python REPL, D doctor (the package's own keymap,
+;; bound only when desktop-dbx is loaded; o opens an ID / URL); f
+;; favorite jobs, and * stars the job in job/run pages and job/run lists.
 ;; Social apps live under the C-c s prefix: b bluesky, h hackernews,
 ;; l lemmy, r reddit, t telegram.
 (defvar my-social-map (make-sparse-keymap)
@@ -77,6 +81,13 @@ Only populated when the pomodoro module is loaded.")
 ;; desktop-roguelike.el, which loads before this file.
 (defvar my-roguelike-keymap)
 
+;; dbx-el keymaps, extended once the package is loaded.
+(defvar dbx-command-map)
+(defvar dbx-job-page-mode-map)
+(defvar dbx-run-page-mode-map)
+(defvar dbx-jobs-list-mode-map)
+(defvar dbx-runs-list-mode-map)
+
 (defun my-dsh-menu-dispatch ()
   "Open the ACP agents menu (DSH / Claude / Codex); old DSH web as fallback."
   (interactive)
@@ -96,7 +107,6 @@ Only populated when the pomodoro module is loaded.")
             ("C-c t" . my-project-terminal)
             ("C-c T" . my-term-project)
             ("C-c M-w" . my-clipboard-copy-image) ; copy image at point
-            ("C-c d" . my-dsh-open)             ; DSH container session
             ;; C-d: удалить выделение, иначе символ вперед.
             ;; `delete-char' (стандартная C-d) игнорирует region;
             ;; `delete-forward-char' работает как <delete>: с активным
@@ -155,6 +165,8 @@ Only populated when the pomodoro module is loaded.")
            ("t" . my-kitsu-trending))            ; trending: kind x period
     (org ("a" . org-agenda)                      ; agenda dispatcher
          ("t" . org-todo-list))                  ; TODOs from the agenda files
+    (dbx ("f" . my-dbx-favorites))           ; favorite jobs dashboard
+    (dbx-page ("*" . my-dbx-favorite-toggle)) ; star the job at point
     (pomodoro ("p" . pomm)                       ; transient UI
               ("s" . pomm-start)                 ; start / resume
               ("S" . pomm-stop)
@@ -226,6 +238,20 @@ Only populated when the pomodoro module is loaded.")
     ('org
      (dolist (b binds)
        (my-keys--bind my-org-map (car b) (cdr b))))
+    ('dbx
+     ;; Extra keys in dbx-el's C-c d map, once dbx is loaded.
+     (when (fboundp 'my-dbx-favorites)
+       (with-eval-after-load 'dbx
+         (dolist (b binds)
+           (my-keys--bind dbx-command-map (car b) (cdr b))))))
+    ('dbx-page
+     ;; dbx job page, run page, jobs and runs lists.
+     (when (fboundp 'my-dbx-favorites)
+       (with-eval-after-load 'dbx-jobs
+         (dolist (map (list dbx-job-page-mode-map dbx-run-page-mode-map
+                            dbx-jobs-list-mode-map dbx-runs-list-mode-map))
+           (dolist (b binds)
+             (my-keys--bind map (car b) (cdr b)))))))
     ('pomodoro
      ;; Bound only when the pomodoro module is loaded; the C-c o p
      ;; prefix itself is wired in `my-keys-apply'.
@@ -250,6 +276,9 @@ Only populated when the pomodoro module is loaded.")
     (define-key global-map (kbd "C-c l") my-lexicon-map))
   (when (fboundp 'my-kitsu-dashboard)
     (define-key global-map (kbd "C-c K") my-kitsu-map))
+  ;; dbx-el's autoloaded prefix keymap; the package loads on first use.
+  (when (fboundp 'dbx-command-map)
+    (define-key global-map (kbd "C-c d") 'dbx-command-map))
   (when (fboundp 'org-agenda)
     (define-key global-map (kbd "C-c o") my-org-map)
     (when (fboundp 'pomm-start)
@@ -307,6 +336,8 @@ Only populated when the pomodoro module is loaded.")
      :if (lambda () (fboundp 'my-telega)))
     ("R" "Reddit" my-reddit
      :if (lambda () (fboundp 'my-reddit)))
+    ("b" "Databricks" dbx-dispatch
+     :if (lambda () (fboundp 'dbx-dispatch)))
     ("K" "Kitsu menu" my-kitsu-menu
      :if (lambda () (fboundp 'my-kitsu-menu)))
     ("o" "Org agenda" org-agenda

@@ -31,8 +31,7 @@
 ;; so it needs no ACP `session/list' capability.
 ;;
 ;; The web/dsh-emacs integration lives in desktop-dsh.el and is no
-;; longer in this menu; it stays reachable through `C-c d' /
-;; `M-x my-dsh-open'.
+;; longer in this menu; it stays reachable through `M-x my-dsh-open'.
 
 ;;; Code:
 
