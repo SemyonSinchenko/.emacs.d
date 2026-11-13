@@ -161,19 +161,30 @@ to a second line.  See `my-desktop-tab-workspaces-max-width' and
                                    (my-tab-bar--ws-clip (car nw) (cdr nw)))
                                  plan sep)))
           ;; Last resort: even a clamped plan must not exceed BUDGET.
-          (truncate-string-to-width
-           (concat open block close)
-           budget nil nil my-tab-bar--ws-ellipsis)))
+          (my-tab-bar--ws-item
+           current
+           (truncate-string-to-width
+            (concat open block close)
+            budget nil nil my-tab-bar--ws-ellipsis))))
     (error nil)))
+
+(defun my-tab-bar--ws-item (current caption)
+  "Tab-bar item showing CAPTION, keyed by the CURRENT workspace.
+Redisplay redraws the tab bar only when its items differ by
+`equal', which ignores text properties.  A plain string segment
+therefore looks unchanged after a switch (same names, only the
+highlight face moved) and the highlight stayed on the old
+workspace until some other segment's text changed (listen's
+elapsed time while music plays, a new workspace name).  Putting
+the current name into the item key makes every switch a change."
+  `((,(intern (concat "my-ws-" current)) menu-item ,caption ignore)))
 
 (defun my-tab-bar-refresh ()
   "Force the top status strip to re-render its segments.
 The tab bar re-evaluates its format functions only after a
 GLOBAL mode-line invalidation (`force-mode-line-update' with a
-non-nil argument).  A workspace switch marks only mode lines
-dirty, so the workspaces highlight used to stay on the previous
-workspace until some periodic timer refreshed the strip (for
-example listen's status timer while music is playing)."
+non-nil argument).  Re-evaluation alone is not enough for a
+highlight-only change, see `my-tab-bar--ws-item'."
   (force-mode-line-update 'all))
 
 (setq tab-bar-format
