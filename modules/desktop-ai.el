@@ -758,19 +758,27 @@ from the database, and reconnects it to its attachments folder."
   "Convert FILE to markdown text with markitdown and write OUT.
 Return the character count."
   (let ((bin (my-ai--markitdown))
-        (outbuf (generate-new-buffer " *markitdown out*"))
-        (errbuf (generate-new-buffer " *markitdown err*"))
-        text)
+        ;; `call-process' takes stderr only as a file name, not a buffer.
+        (errfile (make-temp-file "markitdown-err"))
+        status text err)
     (unless bin
+      (delete-file errfile)
       (user-error "markitdown not found -- install it with: \
 uv tool install \"markitdown[all]\""))
     (unwind-protect
-        (progn
-          (call-process bin nil (list outbuf errbuf) nil file)
-          (with-current-buffer outbuf
-            (setq text (string-trim (buffer-string)))))
-      (kill-buffer outbuf)
-      (kill-buffer errbuf))
+        (with-temp-buffer
+          (setq status (call-process bin nil (list t errfile) nil
+                                     (expand-file-name file)))
+          (setq text (string-trim (buffer-string)))
+          (erase-buffer)
+          (insert-file-contents errfile)
+          (setq err (string-trim (buffer-string))))
+      (delete-file errfile))
+    (unless (eql status 0)
+      (user-error "markitdown failed on %s (%s): %s"
+                  file status
+                  (if (string-empty-p err) "no stderr"
+                    (car (last (split-string err "\n" t))))))
     (when (string-empty-p text)
       (user-error "markitdown produced no text for %s" file))
     (when (> (length text) my-desktop-ai-attachment-max-size)

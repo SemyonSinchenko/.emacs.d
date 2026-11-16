@@ -227,7 +227,9 @@
 (setq my-desktop-ai-deepseek-api-url "https://api.deepseek.com")
 (setq my-desktop-ai-deepseek-api-key-env "DEEPSEEK_API_KEY")
 (setq my-desktop-ai-enable-claude-usage t)
-(setq my-desktop-ai-claude-credentials-file "~/.claude/.credentials.json")
+;; Personal account (not the work login in ~/.claude):
+(setq my-desktop-ai-claude-credentials-file
+      "~/.claude-personal/.credentials.json")
 ;; A long-lived token from `claude setup-token' wins when this is set:
 (setq my-desktop-ai-claude-oauth-token-env "CLAUDE_CODE_OAUTH_TOKEN")
 
