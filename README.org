@@ -3,17 +3,12 @@
 This configuration relies on the following external CLI and system packages.
 
 ** Core Utilities
-- =git=: Version control (required by =llm-diff=, =aider=, and =magit=).
+- =git=: Version control (required by =magit=).
 - =ripgrep=: Fast text search (used by =consult-ripgrep= and project search).
 - =fd=: Fast file search (standard companion to ripgrep).
 - =curl=: HTTP client (required for API requests via =gptel=).
 - =sqlite3=: Database engine (required by =org-roam=).
 - =unzip=: Archive extractor (required by the =reader= package for EPUB files).
-
-** AI Tools
-- =aider=: AI pair programming tool.
-  - Install via pip: =pip install aider-chat=
-  - Requires =git= to be initialized in the project directory.
 
 ** Language Servers & Tools
 

@@ -167,6 +167,9 @@ Fallback: set back to nil to restore the stable Metals v1 setup."
   :custom
   (rustic-cargo-use-last-stored-arguments t))
 
+;; --- Org (built-in; Org/org-roam setup lives in the Emacs Desktop) ---
+(add-hook 'org-mode-hook #'visual-line-mode)
+
 ;; --- Markdown & Data Formats ---
 
 (use-package markdown-mode
@@ -187,20 +190,6 @@ Fallback: set back to nil to restore the stable Metals v1 setup."
   :mode ("\\.proto\\'" . protobuf-mode)
   :config
   (add-to-list 'auto-mode-alist '("\\.protobuf\\'" . protobuf-mode)))
-
-;; Easky
-(use-package easky
-  :defer t
-  :ensure t)
-
-;; Clojure stuff
-(use-package clojure-ts-mode
-  :ensure t
-  :defer t)
-
-(use-package cider
-  :ensure t
-  :defer t)
 
 ;; ANTLR4
 (setq auto-mode-alist (cons '("\\.g\\'" . antlr-mode) auto-mode-alist))

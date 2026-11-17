@@ -75,13 +75,6 @@
   :config
   (global-wakatime-mode))
 
-;; CSV
-(use-package rainbow-csv
-  :ensure t
-  :config
-  (add-hook 'csv-mode-hook #'rainbow-csv-mode)
-  (add-hook 'tsv-mode-hook #'rainbow-csv-mode))
-
 (use-package visual-regexp-steroids
   :ensure t
   :custom

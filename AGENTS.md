@@ -5,6 +5,8 @@ configurations**:
 
 1. **IDE config** (`init.el` + `early-init.el`) - the classic modular
    configuration with `modules/core-*`, `modules/tools-*`, `modules/lang-*`.
+   Kept lightweight: Eglot, tree-sitter, completion, Projectile, ECA.
+   Org/org-roam, AI chat, social, etc. belong to the Desktop only.
 2. **Emacs Desktop** (`desktop-init.el` + `desktop-config.el`) - a
    "desktop environment in Emacs": workspaces, terminals, feeds, media,
    AI assistant. All machinery lives in `modules/desktop-*`; all user
@@ -17,12 +19,12 @@ configurations**:
 ```
 .emacs.d/
 ├── init.el                  # IDE config entry point (loads core/tools/lang modules)
-├── early-init.el            # Pre-package init for the IDE config (frame params, Emacs 31 shim)
+├── early-init.el            # Pre-package init for the IDE config (frame params, no package auto-activation, Emacs 31 shim)
 ├── desktop-init.el          # Emacs Desktop entry point (machinery only, no user settings)
 ├── desktop-config.el        # Emacs Desktop user settings (the ONE file to edit)
 ├── minimal-editor-init.el   # Minimal daemon/TTY editor config
 ├── modules/                 # Configuration modules
-│   ├── core-package.el      # package.el archives, use-package bootstrap (IDE)
+│   ├── core-package.el      # package.el archives, use-package; activates only `my-ide-packages` (IDE)
 │   ├── core-ui.el           # IDE appearance
 │   ├── core-keys.el         # IDE global keybindings
 │   ├── core-completion.el   # Vertico/Corfu/Orderless (IDE)
@@ -61,10 +63,7 @@ configurations**:
 │   ├── lang-prog.el         # Language settings (Python, Java, Scala, Rust, ...)
 │   ├── lang-metals-v2.el    # Opt-in Scala Metals v2 (enabled by `my-use-metals-v2')
 │   ├── tools-dired.el       # Dired, Magit, terminal, Projectile (IDE)
-│   ├── tools-ai.el          # Aider + ECA (IDE)
-│   ├── tools-aider-custom.el # Aider integration details (required by tools-ai)
-│   ├── tools-org.el         # Org + org-roam (IDE)
-│   └── tools-lexicon.el     # lexicon-org: local AI text transforms in org buffers
+│   └── tools-ai.el          # ECA (IDE)
 ├── lisp/                    # Vendored library code (on load-path; currently protobuf-mode.el)
 ├── mas-prompts/             # Prompt templates of the multi-agent flows (<flow>/<step>.md)
 ├── tests/                   # ERT tests (desktop-mas, desktop-podman); stubbed, no network
@@ -395,6 +394,10 @@ machinery code; add a `defcustom` to `desktop-config-defs.el` and read it.
 1. Create `modules/xxx-yyy.el` with the standard header.
 2. Add `(require 'xxx-yyy)` to `init.el` in the appropriate order
    (core -> tools -> lang).
+3. `elpa/` is shared with the Desktop, and the IDE activates only the
+   packages listed in `my-ide-packages` (`modules/core-package.el`)
+   plus their dependencies: add every new IDE package there, or it
+   will not load on the next start.
 
 ### Adding a New Desktop Module
 
@@ -425,7 +428,7 @@ machinery code; add a `defcustom` to `desktop-config-defs.el` and read it.
 ## System Dependencies
 
 `README.org` lists the core, AI, and language-server tools: `git`,
-`ripgrep`, `fd`, `curl`, `sqlite3` (org-roam), `unzip`; AI: `aider`,
+`ripgrep`, `fd`, `curl`, `sqlite3` (org-roam), `unzip`; AI:
 `lexicon-cli`; servers: `ty` + `ruff` (Python), `jdtls` (Java),
 `metals` (Scala), `rust-analyzer` (Rust); `multimarkdown` (Markdown).
 The Desktop modules additionally use (all optional, degrade gracefully):

@@ -16,6 +16,11 @@
 This is equivalent to (set (make-local-variable SYMBOL) VALUE)."
     (set (make-local-variable symbol) value)))
 
+;;; Packages: elpa/ is shared with the Emacs Desktop, so activating
+;;; everything at startup would load the Desktop's packages too.
+;;; core-package.el activates only `my-ide-packages' and their deps.
+(setq package-enable-at-startup nil)
+
 ;;; Disable TRAMP-GVFS
 (setq tramp-archive-enabled nil)
 (defalias 'tramp-archive-file-name-p #'ignore)

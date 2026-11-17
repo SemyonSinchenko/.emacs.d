@@ -1,8 +1,8 @@
 ;;; desktop-lexicon.el --- Lexicon CLI text transforms for org -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; Local AI text transforms via lexicon-cli, as in the IDE's
-;; tools-lexicon.el: region is replaced with an smerge conflict
+;; Local AI text transforms via lexicon-cli: region is replaced
+;; with an smerge conflict
 ;; (top = original, bottom = AI result).  Keys live under the C-c l
 ;; prefix (see modules/desktop-keys.el).  The module is optional: it
 ;; needs the local checkout from `my-desktop-lexicon-dir'.

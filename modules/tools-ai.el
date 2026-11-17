@@ -1,14 +1,9 @@
-;;; tools-ai.el --- AI tools configuration (Aider, Copilot, ECA) -*- lexical-binding: t; -*-
+;;; tools-ai.el --- AI tools configuration (ECA) -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This module configures AI coding assistants:
-;; - Aider: integration with Aider CLI via eat.
-;; - Copilot and ECA helpers.
+;; This module configures the ECA coding assistant.
 
 ;;; Code:
-
-;; Aider
-(require 'tools-aider-custom)
 
 ;; ECA
 (use-package eca
@@ -16,10 +11,9 @@
   :custom
   (eca-chat-use-side-window nil))
 
-;; Unified AI map (without GPTel)
+;; Unified AI map
 (defvar my-ai-map
   (let ((map (make-sparse-keymap)))
-    (keymap-set map "a" #'my/aider-menu)
     (keymap-set map "e" #'eca)
     (keymap-set map "r" #'eca-rewrite)
     map)
